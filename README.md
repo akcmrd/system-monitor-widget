@@ -22,7 +22,7 @@ A ⚙ panel lets you choose and reorder sections, theme, units, clock style and 
 
 **Desktops:** KDE Plasma, XFCE, Cinnamon and MATE are fully supported. On GNOME the widget works,
 but GNOME shows no desktop icons by default (so the installer's desktop-icon option has no effect)
-and "keep below other windows" may behave differently. Wayland sessions work through XWayland,
+and the "Always on top" / "Always below" stacking options may behave differently. Wayland sessions work through XWayland,
 which is installed by default almost everywhere.
 
 ## Install
@@ -69,7 +69,7 @@ Click ⚙ in the top-right corner. Changes are saved to `~/.config/system-monito
 - **Layout:** show, hide and reorder sections (Clock, CPU & Memory, GPU, Battery, Storage, Network, Top processes); pick storage drives
 - **Look:** theme, accent colour, opacity, size, normal/compact density; 12/24-hour clock, seconds, date
 - **Data:** processes shown (1–10), process columns, update interval, red-alert threshold, GB/GiB, Mbps/MB/s, °C/°F, network details, network speed graph
-- **Window:** corner, keep below other windows, click-through (only ⚙ stays clickable), reset to defaults
+- **Window:** position (a corner, or free: drag the widget anywhere), stacking (normal, always on top, always below), click-through (only ⚙ stays clickable), reset to defaults
 
 The GPU section reads NVIDIA cards through `nvidia-smi`; it is off by default.
 

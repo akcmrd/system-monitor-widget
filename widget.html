@@ -30,6 +30,8 @@
   .sec.sep { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
   .widget.no-clock { padding-top: 26px; }
   .widget.settings-open .sec, .widget.settings-open .footer { display: none !important; }
+  .widget.free { cursor: move; }
+  .widget.free .settings, .widget.free button, .widget.free input { cursor: default; }
   .gear { position: absolute; top: 8px; right: 10px; width: 20px; height: 20px; padding: 2px; border: 0; border-radius: 5px;
           background: transparent; color: var(--muted); cursor: pointer; }
   .gear:hover, .widget.settings-open .gear { color: var(--text); background: var(--line); }
@@ -41,9 +43,28 @@
   .set-label { font-size: 9px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
   .set-group > .set-label { margin-bottom: 5px; }
   .set-check { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text); padding: 3px 0; cursor: pointer; }
-  .set-check input { accent-color: var(--accent); margin: 0; }
+  /* Checkboxes and sliders are drawn in CSS too: native ones render white */
+  .set-check input { appearance: none; -webkit-appearance: none; flex-shrink: 0; width: 13px; height: 13px; margin: 0;
+                     display: inline-grid; place-content: center; border: 1px solid var(--line2); border-radius: 3px;
+                     background: var(--bg); cursor: pointer; }
+  .set-check input:checked { background: var(--accent); border-color: var(--accent); }
+  .set-check input:checked::after { content: ''; width: 7px; height: 4px; margin-top: -2px; border: solid #fff;
+                                    border-width: 0 0 1.5px 1.5px; transform: rotate(-45deg); }
   .set-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
-  .set-row select { background: var(--bg); color: var(--text); border: 1px solid var(--line2); border-radius: 5px; font-size: 11px; padding: 2px 4px; }
+  /* Native <select> popups use the system (often white) theme, so selects are hidden
+     and shown as a themed button plus an inline option list instead */
+  .set-row select { display: none; }
+  .dd-btn { position: relative; min-width: 96px; padding: 2px 20px 2px 7px; border: 1px solid var(--line2); border-radius: 5px;
+            background: var(--bg); color: var(--text); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+  .dd-btn::after { content: '▾'; position: absolute; right: 6px; color: var(--muted); }
+  .dd-btn:hover, .dd-btn.open { border-color: var(--accent); }
+  .dd-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 2px; margin: 2px 0 4px;
+             padding: 3px; background: var(--bg); border: 1px solid var(--line2); border-radius: 6px; }
+  .dd-list[hidden] { display: none; }
+  .dd-opt { padding: 3px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text);
+            font: inherit; font-size: 11px; text-align: left; cursor: pointer; white-space: nowrap; }
+  .dd-opt:hover { background: var(--line); }
+  .dd-opt.on { background: var(--accent); color: #fff; }
   .set-actions { display: flex; justify-content: space-between; gap: 8px; }
   .set-btn { flex: 1; font-size: 11px; font-weight: 600; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line2); cursor: pointer; }
   .set-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -51,7 +72,10 @@
   .set-btn.danger:hover { background: rgba(248,81,73,.12); }
 
   .set-range { display: flex; align-items: center; gap: 6px; }
-  .set-range input { width: 120px; accent-color: var(--accent); margin: 0; }
+  .set-range input { width: 120px; height: 4px; margin: 0; appearance: none; -webkit-appearance: none; border-radius: 2px;
+                     background: linear-gradient(to right, var(--accent) var(--fill, 50%), var(--line2) var(--fill, 50%)); cursor: pointer; }
+  .set-range input::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+                                           background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--accent); }
   .set-range b { font-size: 10px; color: var(--text); width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
   .swatches { display: flex; gap: 6px; }
   .swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
@@ -300,8 +324,9 @@
     <div class="set-page" data-page="window">
       <div class="set-group">
       <div class="set-row"><span class="set-label">Position</span>
-        <select id="setCorner"><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option><option value="top-right">Top right</option><option value="top-left">Top left</option></select></div>
-        <label class="set-check"><input type="checkbox" id="setBelow"> Keep below other windows</label>
+        <select id="setCorner"><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option><option value="top-right">Top right</option><option value="top-left">Top left</option><option value="free">Free · drag to move</option></select></div>
+      <div class="set-row"><span class="set-label">Stacking</span>
+        <select id="setLayer"><option value="normal">Normal</option><option value="above">Always on top</option><option value="below">Always below</option></select></div>
         <label class="set-check"><input type="checkbox" id="setClickThrough"> Click-through</label>
         <div class="set-note">Clicks pass through to the desktop; only ⚙ stays clickable.</div>
       </div>
@@ -472,10 +497,10 @@ const SECTION_NAMES = { clock: 'Clock', cpumem: 'CPU & Memory', gpu: 'GPU (NVIDI
                         storage: 'Storage', network: 'Network', procs: 'Top processes' };
 // Settings stored as-is from a form control: key -> element id
 const SELECT_IDS = { theme: 'setTheme', corner: 'setCorner', procCols: 'setProcCols', density: 'setDensity',
-                     diskUnit: 'setDiskUnit', netUnit: 'setNetUnit', tempUnit: 'setTempUnit' };
+                     diskUnit: 'setDiskUnit', netUnit: 'setNetUnit', tempUnit: 'setTempUnit', layer: 'setLayer' };
 const NUMBER_IDS = { zoom: 'setZoom', interval: 'setInterval', procs: 'setProcs', alert: 'setAlert' };
 const BOOL_IDS   = { clock24: 'setClock24', clockSeconds: 'setClockSeconds', clockDate: 'setClockDate',
-                     netDetails: 'setNetDetails', netGraph: 'setNetGraph', below: 'setBelow', clickThrough: 'setClickThrough' };
+                     netDetails: 'setNetDetails', netGraph: 'setNetGraph', clickThrough: 'setClickThrough' };
 const $ = id => document.getElementById(id);
 
 function updateSeparators() {
@@ -534,6 +559,7 @@ function applySettings(s) {
   w.classList.toggle('no-seconds', !s.clockSeconds);
   w.classList.toggle('no-date', !s.clockDate);
   w.classList.toggle('compact', s.density === 'compact');
+  w.classList.toggle('free', s.corner === 'free');
   w.classList.toggle('no-net-details', !s.netDetails);
   w.classList.toggle('net-graph-on', s.netGraph);
   $('procColCpu').style.display = s.procCols === 'mem' ? 'none' : '';
@@ -547,6 +573,8 @@ function applySettings(s) {
   updateClock();
   if (window.SYSDATA) applyData(window.SYSDATA);
   for (const cb of document.querySelectorAll('input[data-drive]')) cb.checked = s.drives.includes(cb.dataset.drive);
+  syncDropdowns();
+  paintRanges();
   updateSeparators();
   post({ action: 'fit' });
 }
@@ -567,7 +595,47 @@ function saveSettings() {
   applySettings(s);
   post({ action: 'save', settings: s });
 }
+// ── THEMED DROPDOWNS ──────────────────────────────────────────
+function closeDropdowns() {
+  for (const l of document.querySelectorAll('.dd-list')) l.hidden = true;
+  for (const b of document.querySelectorAll('.dd-btn')) b.classList.remove('open');
+}
+function paintRanges() {
+  for (const r of document.querySelectorAll('.set-range input'))
+    r.style.setProperty('--fill', (r.value - r.min) / (r.max - r.min) * 100 + '%');
+}
+function syncDropdowns() {
+  for (const sel of document.querySelectorAll('#settings select'))
+    if (sel._dd) sel._dd.textContent = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+}
+function buildDropdowns() {
+  for (const sel of document.querySelectorAll('#settings select')) {
+    const btn = document.createElement('button'), list = document.createElement('div');
+    btn.type = 'button'; btn.className = 'dd-btn';
+    list.className = 'dd-list'; list.hidden = true;
+    sel.after(btn);
+    sel.closest('.set-row').after(list);  // opens inline, so it is never cut off by the window edge
+    btn.onclick = () => {
+      const opening = list.hidden;
+      closeDropdowns();
+      if (opening) {
+        list.replaceChildren(...[...sel.options].map(o => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'dd-opt' + (o.value === sel.value ? ' on' : ''); b.textContent = o.textContent;
+          b.onclick = () => { sel.value = o.value; closeDropdowns(); syncDropdowns(); sel.dispatchEvent(new Event('change')); };
+          return b;
+        }));
+        list.hidden = false; btn.classList.add('open');
+      }
+      post({ action: 'fit' });
+    };
+    sel._dd = btn;
+  }
+  syncDropdowns();
+}
+
 function toggleSettings() {
+  closeDropdowns();
   const open = $('widget').classList.toggle('settings-open');
   post({ action: 'panel', open });
   post({ action: 'fit' });
@@ -587,10 +655,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   for (const el of document.querySelectorAll('#settings input, #settings select'))
     el.addEventListener('change', saveSettings);
+  buildDropdowns();
+  // Free position: drag the widget by any non-interactive part
+  document.addEventListener('mousedown', e => {
+    if (!SETTINGS || SETTINGS.corner !== 'free' || e.button !== 0) return;
+    if ($('widget').classList.contains('settings-open') || e.target.closest('button, input, label, .dd-list')) return;
+    e.preventDefault();
+    post({ action: 'drag' });
+  });
+  for (const r of document.querySelectorAll('.set-range input')) r.addEventListener('input', paintRanges);
   const alertSlider = $('setAlert');
   alertSlider.addEventListener('input', () => { $('alertVal').textContent = alertSlider.value + '%'; });
 
   for (const b of document.querySelectorAll('#setTabs button')) b.onclick = () => {
+    closeDropdowns();
     for (const x of document.querySelectorAll('#setTabs button')) x.classList.toggle('on', x === b);
     for (const pg of document.querySelectorAll('.set-page')) pg.classList.toggle('on', pg.dataset.page === b.dataset.tab);
     post({ action: 'fit' });

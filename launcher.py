@@ -26,7 +26,8 @@ DEFAULT_SETTINGS = {
                  'storage': True, 'network': True, 'procs': True},
     'order':    list(SECTIONS),  # top-to-bottom section order
     'zoom':     ZOOM,
-    'corner':   'bottom-right',
+    'corner':   'bottom-right',  # a screen corner, or 'free' (drag anywhere)
+    'pos':      None,            # [x, y] top-left of the window in 'free' mode
     'interval': 1,
     'theme':    'dark',
     'accent':   '#58a6ff',
@@ -44,17 +45,17 @@ DEFAULT_SETTINGS = {
     'netDetails': True, # IP / subnet / gateway / DNS rows
     'netGraph':   False,
     'density':  'normal',
-    'below':    False,  # keep the window below other windows
+    'layer':    'normal',  # normal, above (always on top) or below other windows
     'clickThrough': False,  # clicks pass through, except on the ⚙ button
 }
 MAX_PROCS = 10
 
-CORNERS = ('bottom-right', 'bottom-left', 'top-right', 'top-left')
+CORNERS = ('bottom-right', 'bottom-left', 'top-right', 'top-left', 'free')
 THEMES  = ('dark', 'midnight', 'graphite', 'black', 'light')
 CHOICES = {'corner': CORNERS, 'theme': THEMES, 'procCols': ('both', 'cpu', 'mem'),
            'diskUnit': ('GB', 'GiB'), 'netUnit': ('bits', 'bytes'), 'tempUnit': ('C', 'F'),
-           'density': ('normal', 'compact')}
-BOOLS   = ('clock24', 'clockSeconds', 'clockDate', 'netDetails', 'netGraph', 'below', 'clickThrough')
+           'density': ('normal', 'compact'), 'layer': ('normal', 'above', 'below')}
+BOOLS   = ('clock24', 'clockSeconds', 'clockDate', 'netDetails', 'netGraph', 'clickThrough')
 
 def _num(v, lo, hi, default):
     try:
@@ -89,6 +90,11 @@ def clean_settings(new, base=DEFAULT_SETTINGS):
     for k in BOOLS:
         if isinstance(new.get(k), bool):
             s[k] = new[k]
+    if new.get('below') is True and 'layer' not in new:  # settings saved before 'layer' existed
+        s['layer'] = 'below'
+    pos = new.get('pos')
+    if isinstance(pos, list) and len(pos) == 2 and all(isinstance(v, (int, float)) and abs(v) < 100000 for v in pos):
+        s['pos'] = [int(pos[0]), int(pos[1])]
     if isinstance(new.get('order'), list):
         order = [k for k in dict.fromkeys(x for x in new['order'] if isinstance(x, str)) if k in SECTIONS]
         s['order'] = order + [k for k in SECTIONS if k not in order]
@@ -365,7 +371,11 @@ class Widget(Gtk.Window):
         # Transparency via compositor window opacity (not an RGBA visual,
         # which flickers with WebKitGTK 4.1)
         self.set_opacity(self.settings['opacity'])
-        self.set_keep_below(self.settings['below'])
+        self._apply_layer()
+
+        # Free mode: remember where the window is dropped after a drag
+        self._pos_save_id = None
+        self.connect('configure-event', self._on_configure)
 
         # Position in the chosen corner after the window is mapped
         self._reposition()
@@ -384,10 +394,38 @@ class Widget(Gtk.Window):
 
     def _reposition(self):
         corner = self.settings.get('corner', 'bottom-right')
-        x = self.sx + MARGIN if 'left' in corner else self.sx + self.sw - self.w - MARGIN
-        y = self.sy + MARGIN if 'top' in corner else self.sy + self.sh - self.h - MARGIN
+        if corner == 'free':
+            x, y = self.settings['pos'] or self.get_position()
+            # keep it on screen (the screen or the widget's size may have changed)
+            x = min(max(x, self.sx), self.sx + self.sw - self.w)
+            y = min(max(y, self.sy), self.sy + self.sh - self.h)
+        else:
+            x = self.sx + MARGIN if 'left' in corner else self.sx + self.sw - self.w - MARGIN
+            y = self.sy + MARGIN if 'top' in corner else self.sy + self.sh - self.h - MARGIN
         self.move(x, y)
         return False  # run once
+
+    def _start_drag(self):
+        """Free mode: let the window manager move the window with the mouse."""
+        if self.settings['corner'] != 'free':
+            return
+        _, x, y = Gdk.Display.get_default().get_default_seat().get_pointer().get_position()
+        self.begin_move_drag(1, x, y, Gtk.get_current_event_time())
+
+    def _on_configure(self, *_):
+        if self.settings['corner'] == 'free':
+            if self._pos_save_id:
+                GLib.source_remove(self._pos_save_id)
+            self._pos_save_id = GLib.timeout_add(600, self._save_pos)
+        return False
+
+    def _save_pos(self):
+        self._pos_save_id = None
+        pos = list(self.get_position())
+        if self.settings['corner'] == 'free' and pos != self.settings['pos']:
+            self.settings['pos'] = pos
+            save_settings(self.settings)
+        return False
 
     def _on_message(self, ucm, js_result):
         try:
@@ -413,15 +451,19 @@ class Widget(Gtk.Window):
         elif action == 'reset':
             self._apply(clean_settings({}))
             self.wv.run_javascript(f"applySettings({json.dumps(self.settings)});", None, None, None)
+        elif action == 'drag':
+            self._start_drag()
         elif action == 'panel':  # settings panel opened/closed: it must stay clickable
             self.panel_open = bool(msg.get('open'))
             self._update_input_shape()
 
     def _apply(self, new):
+        if new['corner'] == 'free' and self.settings['corner'] != 'free':
+            new['pos'] = list(self.get_position())  # start free mode where the widget is now
         old, self.settings = self.settings, new
         save_settings(new)
         self.set_opacity(new['opacity'])
-        self.set_keep_below(new['below'])
+        self._apply_layer()
         if new['zoom'] != old['zoom']:
             self.wv.set_zoom_level(new['zoom'])
         if new['interval'] != old['interval']:
@@ -432,6 +474,11 @@ class Widget(Gtk.Window):
         self._update_input_shape()
         self._reposition()
         GLib.timeout_add(50, self._fit)
+
+    def _apply_layer(self):
+        layer = self.settings['layer']
+        self.set_keep_above(layer == 'above')
+        self.set_keep_below(layer == 'below')
 
     def _push_data_once(self):
         self._push_data()
