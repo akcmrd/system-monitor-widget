@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root { --alpha: 0.93;
+    --bg: #0d1117; --card: #161b22; --line: #21262d; --line2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --dim: #484f58; --accent: #58a6ff; }
+
+  html, body {
+    width: max-content;
+    overflow: hidden;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  .widget {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 18px 10px;
+    width: 380px;
+    color: var(--text);
+  }
+
+  /* ── SECTIONS / SETTINGS ── */
+  .widget { position: relative; }
+  .sec.sep { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+  .widget.no-clock { padding-top: 26px; }
+  .widget.settings-open .sec, .widget.settings-open .footer { display: none !important; }
+  .gear { position: absolute; top: 8px; right: 10px; width: 20px; height: 20px; padding: 2px; border: 0; border-radius: 5px;
+          background: transparent; color: var(--muted); cursor: pointer; }
+  .gear:hover, .widget.settings-open .gear { color: var(--text); background: var(--line); }
+  .gear svg { width: 16px; height: 16px; display: block; }
+  .settings { display: none; padding: 2px 0 4px; }
+  .widget.settings-open .settings { display: block; }
+  .set-head { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+  .set-group { background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; margin-bottom: 8px; }
+  .set-label { font-size: 9px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+  .set-group > .set-label { margin-bottom: 5px; }
+  .set-check { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text); padding: 3px 0; cursor: pointer; }
+  .set-check input { accent-color: var(--accent); margin: 0; }
+  .set-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+  .set-row select { background: var(--bg); color: var(--text); border: 1px solid var(--line2); border-radius: 5px; font-size: 11px; padding: 2px 4px; }
+  .set-actions { display: flex; justify-content: space-between; gap: 8px; }
+  .set-btn { flex: 1; font-size: 11px; font-weight: 600; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line2); cursor: pointer; }
+  .set-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .set-btn.danger { background: transparent; color: #ff7b72; }
+  .set-btn.danger:hover { background: rgba(248,81,73,.12); }
+
+  .set-range { display: flex; align-items: center; gap: 6px; }
+  .set-range input { width: 120px; accent-color: var(--accent); margin: 0; }
+  .set-range b { font-size: 10px; color: var(--text); width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+  .swatches { display: flex; gap: 6px; }
+  .swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .swatch.on { border-color: var(--text); }
+
+  /* ── CLOCK ── */
+  .datetime-section {
+    text-align: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 10px;
+  }
+  .datetime-section { border-bottom: 0 !important; margin-bottom: 0 !important; padding-bottom: 0 !important; }
+  .time { font-size: 38px; font-weight: 200; letter-spacing: 2px; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+  .time .seconds { font-size: 24px; color: var(--accent); opacity: .85; }
+  .time .ampm { font-size: 14px; font-weight: 600; color: var(--accent); letter-spacing: 1px; align-self: flex-end; margin-bottom: 2px; }
+  .date { margin-top: 3px; font-size: 11px; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+
+  /* ── SECTION TITLE ── */
+  .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); font-weight: 600; margin-bottom: 6px; }
+
+  /* ── METRIC BARS ── */
+  .metric { margin-bottom: 8px; }
+  .metric:last-child { margin-bottom: 0; }
+  .metric-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+  .metric-label { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 500; }
+  .metric-icon { width: 13px; height: 13px; opacity: .75; flex-shrink: 0; color: var(--muted); }
+  .metric-value { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-track { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 2px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+  .cpu-fill  { background: linear-gradient(90deg,#58a6ff,#79c0ff); }
+  .mem-fill  { background: linear-gradient(90deg,#3fb950,#56d364); }
+  .hdd-fill  { background: linear-gradient(90deg,#d29922,#e3b341); }
+  .cpu-val { color:#79c0ff; } .mem-val { color:#56d364; } .hdd-val { color:#e3b341; }
+  .bar-fill.alert { background: linear-gradient(90deg,#f85149,#ff7b72) !important; }
+  .metric-value.alert { color: #ff7b72 !important; }
+
+  .cpu-mem { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .cpu-mem .metric { margin-bottom: 0; }
+  .mini-stats { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); white-space: nowrap; }
+  .mini-stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .extra-stats { display: flex; gap: 5px; margin-top: 4px; }
+  .stat-pill {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 9px;
+    color: var(--muted);
+    flex: 1;
+    text-align: center;
+  }
+  .stat-pill span { display: block; font-size: 10px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .divider { height: 1px; background: var(--line); margin: 8px 0; }
+
+  /* ── STORAGE (compact) ── */
+  .disk-row { display: grid; grid-template-columns: 44px 1fr 38px 84px; align-items: center; gap: 7px; padding: 2px 0; }
+  .disk-name { font-size: 10px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .disk-row .bar-track { height: 5px; }
+  .disk-row .metric-value { font-size: 10px; text-align: right; }
+  .disk-size { font-size: 9px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── BANDWIDTH (compact) ── */
+  .bw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .bw { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px; }
+  .bw-top { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+  .bw-arrow { font-size: 10px; font-weight: 700; }
+  .bw-speed { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bw-unit { font-size: 9px; color: var(--muted); }
+  .bw-peak { margin-left: auto; font-size: 8px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .bw .net-bar-track { margin-top: 3px; height: 2px; }
+
+  /* ── NETWORK ── */
+  .net-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .net-card { background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; }
+  .net-card-header { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+  .net-speed { font-size: 17px; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1; }
+  .net-unit  { font-size: 9px; color: var(--muted); margin-top: 1px; }
+  .net-bar-track { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+  .net-bar-fill  { height: 100%; border-radius: 2px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+  .net-in-fill  { background: linear-gradient(90deg,#bc8cff,#d2a8ff); }
+  .net-out-fill { background: linear-gradient(90deg,#f78166,#ffa198); }
+  .net-info { background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; margin-bottom: 6px; }
+  .net-info-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+  .net-dot { width: 6px; height: 6px; border-radius: 50%; background: #f85149; flex-shrink: 0; }
+  .net-dot.up { background: #3fb950; }
+  .net-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .net-type { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+  .net-info-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  .net-info-row .k { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+  .net-info-row .v { font-size: 10px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+  .net-peak { font-size: 9px; color: var(--dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  /* ── PROCESSES ── */
+  .proc-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .proc-col { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px; min-width: 0; }
+  .proc-col-title {
+    font-size: 9px; text-transform: uppercase; letter-spacing: .6px;
+    font-weight: 700; margin-bottom: 2px; padding-bottom: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+  .proc-col-title.cpu-title { color: #79c0ff; }
+  .proc-col-title.mem-title { color: #56d364; }
+
+  .proc-row { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 2px 0 3px; }
+  .proc-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+  .proc-info { flex: 1; min-width: 0; margin-right: 6px; }
+  .proc-name { font-size: 10px; font-weight: 600; color: var(--text); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proc-pid  { font-size: 9px; color: var(--dim); }
+
+  .proc-badge {
+    font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums;
+    white-space: nowrap; flex-shrink: 0;
+    padding: 0 4px; border-radius: 3px;
+  }
+  .proc-badge.cpu { background: rgba(88,166,255,.15); color: #79c0ff; }
+  .proc-badge.cpu.alert { background: rgba(248,81,73,.15); color: #ff7b72; }
+  .proc-badge.mem { background: rgba(63,185,80,.15); color: #56d364; }
+
+  .proc-bar-track { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); overflow: hidden; }
+  .proc-bar-fill  { height: 100%; border-radius: 1px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+  .cpu-bar-color { background: linear-gradient(90deg,#58a6ff,#79c0ff); }
+  .mem-bar-color { background: linear-gradient(90deg,#3fb950,#56d364); }
+  .alert-bar     { background: linear-gradient(90deg,#f85149,#ff7b72) !important; }
+
+  /* ── FOOTER ── */
+  .footer { margin-top: 8px; font-size: 9px; color: var(--dim); text-align: center; letter-spacing: .3px; }
+  .pulse-dot { width: 5px; height: 5px; border-radius: 50%; background: #3fb950; display: inline-block; animation: pulse 2s infinite; margin-right: 3px; vertical-align: middle; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+</style>
+</head>
+<body>
+<div class="widget" id="widget">
+  <button class="gear" id="gearBtn" title="Settings" onclick="toggleSettings()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3"/></svg>
+  </button>
+
+  <!-- SETTINGS PANEL -->
+  <div class="settings" id="settings">
+    <div class="set-head">Settings</div>
+    <div class="set-group">
+      <div class="set-label">Show sections</div>
+      <label class="set-check"><input type="checkbox" data-sec="clock"> Clock</label>
+      <label class="set-check"><input type="checkbox" data-sec="cpumem"> CPU &amp; Memory</label>
+      <label class="set-check"><input type="checkbox" data-sec="storage"> Storage</label>
+      <label class="set-check"><input type="checkbox" data-sec="network"> Network</label>
+      <label class="set-check"><input type="checkbox" data-sec="procs"> Top processes</label>
+    </div>
+    <div class="set-group">
+      <div class="set-row"><span class="set-label">Theme</span>
+        <select id="setTheme">
+          <option value="dark">Dark</option><option value="midnight">Midnight blue</option>
+          <option value="graphite">Graphite</option><option value="black">Black</option>
+          <option value="light">Light</option>
+        </select></div>
+      <div class="set-row"><span class="set-label">Accent</span>
+        <div class="swatches" id="swatches"></div></div>
+      <div class="set-row"><span class="set-label">Opacity</span>
+        <span class="set-range"><input type="range" id="setOpacity" min="40" max="100" step="5"><b id="opacityVal">100%</b></span></div>
+      <div class="set-row"><span class="set-label">Size</span>
+        <select id="setZoom">
+          <option value="0.95">Small</option><option value="1.05">Medium</option>
+          <option value="1.15">Large</option><option value="1.3">Extra large</option>
+        </select></div>
+      <div class="set-row"><span class="set-label">Position</span>
+        <select id="setCorner">
+          <option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option>
+          <option value="top-right">Top right</option><option value="top-left">Top left</option>
+        </select></div>
+      <div class="set-row"><span class="set-label">Update every</span>
+        <select id="setInterval">
+          <option value="1">1 second</option><option value="2">2 seconds</option><option value="5">5 seconds</option>
+        </select></div>
+    </div>
+    <div class="set-actions">
+      <button class="set-btn danger" onclick="post({action:'quit'})">Close widget</button>
+      <button class="set-btn primary" onclick="toggleSettings()">Done</button>
+    </div>
+  </div>
+
+
+  <!-- CLOCK -->
+  <div class="sec" id="sec-clock">
+  <div class="datetime-section">
+    <div class="time"><span id="hm">--:--</span><span class="seconds">:<span id="ss">--</span></span><span class="ampm" id="ampm">AM</span></div>
+    <div class="date" id="dateStr">Loading…</div>
+  </div>
+  </div>
+
+  <div class="sec" id="sec-cpumem">
+  <div class="cpu-mem">
+  <!-- CPU -->
+  <div class="metric">
+    <div class="metric-header">
+      <div class="metric-label">
+        <svg class="metric-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="4" y="4" width="8" height="8" rx="1"/>
+          <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2"/>
+        </svg>CPU
+      </div>
+      <div class="metric-value cpu-val" id="cpuVal">—</div>
+    </div>
+    <div class="bar-track"><div class="bar-fill cpu-fill" id="cpuBar" style="width:0%"></div></div>
+    <div class="mini-stats"><span><b id="cpuFreq">—</b> GHz</span><span><b id="cpuCores">—</b> cores</span><span><b id="cpuTemp">—</b></span></div>
+  </div>
+
+  <!-- MEMORY -->
+  <div class="metric">
+    <div class="metric-header">
+      <div class="metric-label">
+        <svg class="metric-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="5" width="14" height="6" rx="1"/>
+          <path d="M4 5V3M7 5V3M10 5V3M13 5V3M4 11v2M7 11v2M10 11v2M13 11v2"/>
+        </svg>Memory
+      </div>
+      <div class="metric-value mem-val" id="memVal">—</div>
+    </div>
+    <div class="bar-track"><div class="bar-fill mem-fill" id="memBar" style="width:0%"></div></div>
+    <div class="mini-stats"><span><b id="memUsed">—</b> used</span><span><b id="memFree">—</b> free</span><span><b id="memTotal">—</b> total</span></div>
+  </div>
+  </div>
+  </div>
+
+  <!-- STORAGE -->
+  <div class="sec" id="sec-storage">
+  <div class="section-title">Storage</div>
+  <div>
+    <div class="disk-row" id="hddDisk">
+      <span class="disk-name">/</span>
+      <div class="bar-track"><div class="bar-fill hdd-fill" id="hddBar" style="width:0%"></div></div>
+      <span class="metric-value hdd-val" id="hddVal">—</span>
+      <span class="disk-size" id="hddSize">—</span>
+    </div>
+    <div class="disk-row" id="dataDisk">
+      <span class="disk-name">/data</span>
+      <div class="bar-track"><div class="bar-fill hdd-fill" id="dataBar" style="width:0%"></div></div>
+      <span class="metric-value hdd-val" id="dataVal">—</span>
+      <span class="disk-size" id="dataSize">—</span>
+    </div>
+    <div class="disk-row" id="data2Disk">
+      <span class="disk-name">/data2</span>
+      <div class="bar-track"><div class="bar-fill hdd-fill" id="data2Bar" style="width:0%"></div></div>
+      <span class="metric-value hdd-val" id="data2Val">—</span>
+      <span class="disk-size" id="data2Size">—</span>
+    </div>
+  </div>
+  </div>
+
+  <!-- NETWORK -->
+  <div class="sec" id="sec-network">
+  <div class="section-title">Network</div>
+  <div class="net-info">
+    <div class="net-info-head">
+      <span class="net-dot" id="netDot"></span>
+      <span class="net-name" id="netName">—</span>
+      <span class="net-type" id="netType"></span>
+    </div>
+    <div class="net-info-row"><span class="k">IP Address</span><span class="v" id="netIp">—</span></div>
+    <div class="net-info-row"><span class="k">Subnet</span><span class="v" id="netSubnet">—</span></div>
+    <div class="net-info-row"><span class="k">Gateway</span><span class="v" id="netGw">—</span></div>
+    <div class="net-info-row"><span class="k">DNS</span><span class="v" id="netDns">—</span></div>
+  </div>
+  <div class="bw-grid">
+    <div class="bw">
+      <div class="bw-top"><span class="bw-arrow" style="color:#d2a8ff">↓</span><span class="bw-speed" id="netInSpeed" style="color:#d2a8ff">—</span><span class="bw-unit" id="netInUnit">Mbps</span><span class="bw-peak" id="netInPeak">pk —</span></div>
+      <div class="net-bar-track"><div class="net-bar-fill net-in-fill" id="netInBar" style="width:0%"></div></div>
+    </div>
+    <div class="bw">
+      <div class="bw-top"><span class="bw-arrow" style="color:#ffa198">↑</span><span class="bw-speed" id="netOutSpeed" style="color:#ffa198">—</span><span class="bw-unit" id="netOutUnit">Mbps</span><span class="bw-peak" id="netOutPeak">pk —</span></div>
+      <div class="net-bar-track"><div class="net-bar-fill net-out-fill" id="netOutBar" style="width:0%"></div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- TOP PROCESSES -->
+  <div class="sec" id="sec-procs">
+  <div class="section-title">Top 5 Processes</div>
+  <div class="proc-columns">
+    <div class="proc-col">
+      <div class="proc-col-title cpu-title">▲ CPU</div>
+      <div id="cpuProcs"></div>
+    </div>
+    <div class="proc-col">
+      <div class="proc-col-title mem-title">▲ Memory</div>
+      <div id="memProcs"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="footer"><span class="pulse-dot"></span>Live · <span id="footerText">updates every second</span></div>
+</div>
+
+<script>
+// ── SETTINGS ─────────────────────────────────────────────────
+let SETTINGS = null;
+const THEMES = {
+  dark:     { bg:'#0d1117', card:'#161b22', line:'#21262d', line2:'#30363d', text:'#e6edf3', muted:'#8b949e', dim:'#484f58' },
+  midnight: { bg:'#0b1426', card:'#111d33', line:'#1c2b47', line2:'#273a5c', text:'#e3ecfa', muted:'#8da2c0', dim:'#4f6385' },
+  graphite: { bg:'#1e1e1e', card:'#262626', line:'#333333', line2:'#404040', text:'#ececec', muted:'#a0a0a0', dim:'#5f5f5f' },
+  black:    { bg:'#000000', card:'#0e0e0e', line:'#1c1c1c', line2:'#2a2a2a', text:'#f0f0f0', muted:'#8f8f8f', dim:'#4a4a4a' },
+  light:    { bg:'#f6f8fa', card:'#ffffff', line:'#d8dee4', line2:'#c4ccd4', text:'#1f2328', muted:'#59636e', dim:'#8c959f' },
+};
+const ACCENTS = ['#58a6ff', '#3fb950', '#bc8cff', '#f0883e', '#f778ba', '#39c5cf', '#e3b341'];
+function applyTheme(name, accent) {
+  const t = THEMES[name] || THEMES.dark, root = document.documentElement.style;
+  for (const [k, v] of Object.entries(t)) root.setProperty('--' + k, v);
+  root.setProperty('--accent', accent || ACCENTS[0]);
+  for (const b of document.querySelectorAll('.swatch')) b.classList.toggle('on', b.dataset.color === accent);
+  post({ action: 'bg', color: t.bg });  // window background behind the rounded corners
+}
+// Process names come from other programs: escape before inserting as HTML
+function esc(str) {
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+function post(msg) {
+  try { window.webkit.messageHandlers.widget.postMessage(JSON.stringify(msg)); } catch (e) {}
+}
+function updateSeparators() {
+  let first = true;
+  for (const el of document.querySelectorAll('.sec')) {
+    if (el.style.display === 'none') continue;
+    el.classList.toggle('sep', !first);
+    first = false;
+  }
+  document.getElementById('widget').classList.toggle('no-clock', SETTINGS && !SETTINGS.sections.clock);
+}
+function applySettings(s) {
+  SETTINGS = s;
+  for (const [k, on] of Object.entries(s.sections)) {
+    const el = document.getElementById('sec-' + k);
+    if (el) el.style.display = on ? '' : 'none';
+    const cb = document.querySelector(`input[data-sec="${k}"]`);
+    if (cb) cb.checked = on;
+  }
+  document.getElementById('setTheme').value    = s.theme || 'dark';
+  applyTheme(s.theme, s.accent);
+  const op = Math.round((s.opacity ?? 1) * 100);
+  document.getElementById('setOpacity').value = op;
+  document.getElementById('opacityVal').textContent = op + '%';
+  document.getElementById('setZoom').value     = String(s.zoom);
+  document.getElementById('setCorner').value   = s.corner;
+  document.getElementById('setInterval').value = String(s.interval);
+  document.getElementById('footerText').textContent =
+    s.interval == 1 ? 'updates every second' : `updates every ${s.interval} seconds`;
+  updateSeparators();
+}
+function saveSettings() {
+  const s = { sections: {}, zoom: parseFloat(document.getElementById('setZoom').value),
+              corner: document.getElementById('setCorner').value,
+              interval: parseInt(document.getElementById('setInterval').value, 10),
+              theme: document.getElementById('setTheme').value,
+              opacity: parseInt(document.getElementById('setOpacity').value, 10) / 100,
+              accent: (document.querySelector('.swatch.on') || {}).dataset?.color || ACCENTS[0] };
+  for (const cb of document.querySelectorAll('input[data-sec]')) s.sections[cb.dataset.sec] = cb.checked;
+  applySettings(s);
+  post({ action: 'save', settings: s });
+}
+function toggleSettings() {
+  document.getElementById('widget').classList.toggle('settings-open');
+  post({ action: 'fit' });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const opSlider = document.getElementById('setOpacity');
+  opSlider.addEventListener('input', () => {
+    document.getElementById('opacityVal').textContent = opSlider.value + '%';
+    post({ action: 'opacity', value: opSlider.value / 100 });
+  });
+  const box = document.getElementById('swatches');
+  for (const c of ACCENTS) {
+    const b = document.createElement('button');
+    b.className = 'swatch'; b.dataset.color = c; b.style.background = c; b.title = c;
+    b.onclick = () => { for (const x of box.children) x.classList.toggle('on', x === b); saveSettings(); };
+    box.appendChild(b);
+  }
+  for (const el of document.querySelectorAll('#settings input, #settings select'))
+    el.addEventListener('change', saveSettings);
+});
+
+// ── CLOCK ─────────────────────────────────────────────────────
+function updateClock() {
+  const now  = new Date();
+  let   h    = now.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const hm = String(h).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('hm').textContent = hm;
+  document.getElementById('ss').textContent = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('ampm').textContent = ampm;
+  const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('dateStr').textContent =
+    `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+}
+
+// ── BAR HELPER ────────────────────────────────────────────────
+function setBar(barId, valId, pct, cls) {
+  const b = document.getElementById(barId), v = document.getElementById(valId);
+  const al = pct > 80;
+  b.style.width = Math.min(100, pct).toFixed(1) + '%';
+  b.className = `bar-fill ${cls}` + (al ? ' alert' : '');
+  v.className  = `metric-value ${cls.replace('-fill','-val')}` + (al ? ' alert' : '');
+  v.textContent = pct.toFixed(1) + '%';
+}
+function fmtNum(v) { return v >= 100 ? `${Math.round(v)}` : v.toFixed(1); }
+function fmtGB(v) { return v >= 100 ? `${Math.round(v)} GB` : `${v.toFixed(1)} GB`; }
+function fmtSpd(m) {
+  if (m >= 1000) return [(m/1000).toFixed(2), 'Gbps'];
+  if (m >= 1)    return [m.toFixed(1), 'Mbps'];
+  return [(m*1000).toFixed(0), 'Kbps'];
+}
+
+let netInPk = 0, netOutPk = 0;
+
+function applyData(d) {
+  setBar('cpuBar','cpuVal', d.cpu_pct, 'cpu-fill');
+  document.getElementById('cpuFreq').textContent  = d.cpu_freq ? d.cpu_freq.toFixed(2) : '—';
+  document.getElementById('cpuCores').textContent = d.cpu_cores || '—';
+  document.getElementById('cpuTemp').textContent  = d.cpu_temp ? d.cpu_temp.toFixed(0) + '°C' : 'N/A';
+
+  const memPct = d.mem_used / d.mem_total * 100;
+  setBar('memBar','memVal', memPct, 'mem-fill');
+  document.getElementById('memUsed').textContent  = fmtGB(d.mem_used);
+  document.getElementById('memFree').textContent  = fmtGB(d.mem_free);
+  document.getElementById('memTotal').textContent = fmtGB(d.mem_total);
+
+  const disks = [
+    ['hdd',   d.disk_used,  d.disk_total],
+    ['data',  d.data_used,  d.data_total],
+    ['data2', d.data2_used, d.data2_total],
+  ];
+  for (const [k, used, total] of disks) {
+    const has = total != null;
+    document.getElementById(k + 'Disk').style.display = has ? '' : 'none';
+    if (!has) continue;
+    setBar(k + 'Bar', k + 'Val', used / total * 100, 'hdd-fill');
+    document.getElementById(k + 'Size').textContent = `${fmtNum(used)} / ${fmtGB(total)}`;
+  }
+
+  const n = d.net || {};
+  const up = !!n.iface;
+  document.getElementById('netDot').className    = 'net-dot' + (up ? ' up' : '');
+  document.getElementById('netName').textContent = up ? (n.name || n.iface) : 'Disconnected';
+  document.getElementById('netType').textContent = up ? [n.type, n.iface].filter(Boolean).join(' · ') : '';
+  document.getElementById('netIp').textContent     = n.ip ? (n.prefix != null ? `${n.ip}/${n.prefix}` : n.ip) : '—';
+  document.getElementById('netSubnet').textContent = n.subnet || '—';
+  document.getElementById('netGw').textContent     = n.gateway || '—';
+  document.getElementById('netDns').textContent    = (n.dns && n.dns.length) ? n.dns.join(', ') : '—';
+
+  const ni = d.net_in_mbps || 0, no = d.net_out_mbps || 0;
+  if (ni > netInPk)  netInPk  = ni;
+  if (no > netOutPk) netOutPk = no;
+  const [iv,iu] = fmtSpd(ni),  [ov,ou] = fmtSpd(no);
+  const [piv,piu] = fmtSpd(netInPk), [pov,pou] = fmtSpd(netOutPk);
+  document.getElementById('netInSpeed').textContent  = iv;
+  document.getElementById('netInUnit').textContent   = iu;
+  document.getElementById('netOutSpeed').textContent = ov;
+  document.getElementById('netOutUnit').textContent  = ou;
+  document.getElementById('netInBar').style.width    = Math.min(100, ni/1000*100).toFixed(1) + '%';
+  document.getElementById('netOutBar').style.width   = Math.min(100, no/1000*100).toFixed(1) + '%';
+  document.getElementById('netInPeak').textContent   = `pk ${piv} ${piu}`;
+  document.getElementById('netOutPeak').textContent  = `pk ${pov} ${pou}`;
+
+  const procs = d.processes || [];
+  const RAM   = d.mem_total || 16;
+
+  // Sort by CPU
+  const byCPU = [...procs].sort((a,b) => b.cpu - a.cpu).slice(0,5);
+  const maxCPU = Math.max(...byCPU.map(p => p.cpu), 1);
+  document.getElementById('cpuProcs').innerHTML = byCPU.map(p => {
+    const al  = p.cpu > 45;
+    const barW = Math.min(100, p.cpu / maxCPU * 100).toFixed(1);
+    return `<div class="proc-row">
+      <div class="proc-info">
+        <span class="proc-name" title="PID ${Number(p.pid)}">${esc(p.name)}</span>
+        <div class="proc-bar-track"><div class="proc-bar-fill cpu-bar-color${al?' alert-bar':''}" style="width:${barW}%"></div></div>
+      </div>
+      <span class="proc-badge cpu${al?' alert':''}">${p.cpu.toFixed(1)}%</span>
+    </div>`;
+  }).join('');
+
+  // Sort by Memory
+  const byMem = [...procs].sort((a,b) => b.mem - a.mem).slice(0,5);
+  const maxMem = Math.max(...byMem.map(p => p.mem), 0.01);
+  document.getElementById('memProcs').innerHTML = byMem.map(p => {
+    const barW = Math.min(100, p.mem / maxMem * 100).toFixed(1);
+    return `<div class="proc-row">
+      <div class="proc-info">
+        <span class="proc-name" title="PID ${Number(p.pid)}">${esc(p.name)}</span>
+        <div class="proc-bar-track"><div class="proc-bar-fill mem-bar-color" style="width:${barW}%"></div></div>
+      </div>
+      <span class="proc-badge mem">${p.mem.toFixed(1)}G</span>
+    </div>`;
+  }).join('');
+}
+
+function tick() {
+  updateClock();
+  if (window.SYSDATA) applyData(window.SYSDATA);
+}
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
