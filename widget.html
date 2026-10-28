@@ -57,6 +57,38 @@
   .swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
   .swatch.on { border-color: var(--text); }
 
+  .set-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .set-tabs button { flex: 1; font-size: 10px; font-weight: 600; padding: 4px 0; border-radius: 5px; border: 1px solid var(--line2);
+                     background: transparent; color: var(--muted); cursor: pointer; }
+  .set-tabs button.on { background: var(--card); color: var(--text); border-color: var(--accent); }
+  .set-page { display: none; }
+  .set-page.on { display: block; }
+  .sec-row { display: flex; align-items: center; gap: 4px; }
+  .sec-row .set-check { flex: 1; }
+  .mv { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line2); border-radius: 4px; background: transparent;
+        color: var(--muted); font-size: 8px; cursor: pointer; }
+  .mv:hover:not(:disabled) { color: var(--text); background: var(--line); }
+  .mv:disabled { opacity: .3; cursor: default; }
+  .set-note { font-size: 9px; color: var(--muted); margin: 1px 0 3px 21px; }
+  .set-btn.wide { width: 100%; background: transparent; color: var(--text); }
+  .set-btn.wide.armed { color: #ff7b72; border-color: #ff7b72; }
+
+  /* ── DISPLAY OPTIONS ── */
+  .widget.h24 .time .ampm, .widget.no-seconds .time .seconds, .widget.no-date .date { display: none; }
+  .widget.no-net-details .net-info-row { display: none; }
+  .widget.no-net-details .net-info-head { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+  .widget.compact { padding: 9px 13px 7px; }
+  .widget.compact.no-clock { padding-top: 24px; }
+  .widget.compact .sec.sep { margin-top: 5px; padding-top: 5px; }
+  .widget.compact .time { font-size: 30px; }
+  .widget.compact .section-title { margin-bottom: 4px; }
+  .widget.compact .net-info { padding: 4px 7px; margin-bottom: 4px; }
+  .widget.compact .net-info-head { margin-bottom: 3px; padding-bottom: 3px; }
+  .widget.compact .proc-row { padding: 1px 0 2px; }
+  .widget.compact .footer { margin-top: 5px; }
+  .proc-columns.single { grid-template-columns: 1fr; }
+  .sec-note { font-size: 10px; color: var(--muted); }
+
   /* ── CLOCK ── */
   .datetime-section {
     text-align: center;
@@ -86,6 +118,9 @@
   .mem-fill  { background: linear-gradient(90deg,#3fb950,#56d364); }
   .hdd-fill  { background: linear-gradient(90deg,#d29922,#e3b341); }
   .cpu-val { color:#79c0ff; } .mem-val { color:#56d364; } .hdd-val { color:#e3b341; }
+  .gpu-fill  { background: linear-gradient(90deg,#bc8cff,#d2a8ff); }
+  .bat-fill  { background: linear-gradient(90deg,#3fb950,#56d364); }
+  .gpu-val { color:#d2a8ff; } .bat-val { color:#56d364; }
   .bar-fill.alert { background: linear-gradient(90deg,#f85149,#ff7b72) !important; }
   .metric-value.alert { color: #ff7b72 !important; }
 
@@ -147,6 +182,11 @@
   .net-info-row .v { font-size: 10px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
   .net-peak { font-size: 9px; color: var(--dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
 
+  .net-graph { display: none; margin-top: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px 3px; }
+  .widget.net-graph-on .net-graph { display: block; }
+  .net-graph canvas { display: block; width: 100%; height: 40px; }
+  .net-graph-legend { font-size: 8px; color: var(--dim); margin-top: 2px; display: flex; gap: 8px; }
+
   /* ── PROCESSES ── */
   .proc-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .proc-col { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px; min-width: 0; }
@@ -195,46 +235,81 @@
   <!-- SETTINGS PANEL -->
   <div class="settings" id="settings">
     <div class="set-head">Settings</div>
-    <div class="set-group">
-      <div class="set-label">Show sections</div>
-      <label class="set-check"><input type="checkbox" data-sec="clock"> Clock</label>
-      <label class="set-check"><input type="checkbox" data-sec="cpumem"> CPU &amp; Memory</label>
-      <label class="set-check"><input type="checkbox" data-sec="storage"> Storage</label>
-      <label class="set-check"><input type="checkbox" data-sec="network"> Network</label>
-      <label class="set-check"><input type="checkbox" data-sec="procs"> Top processes</label>
+    <div class="set-tabs" id="setTabs">
+      <button data-tab="layout" class="on">Layout</button><button data-tab="look">Look</button><button data-tab="data">Data</button><button data-tab="window">Window</button>
     </div>
-    <div class="set-group">
-      <div class="set-label">Storage drives</div>
-      <div id="setDrives"><div class="disk-empty">Detecting drives…</div></div>
+
+    <div class="set-page on" data-page="layout">
+      <div class="set-group">
+        <div class="set-label">Sections · ▲▼ to reorder</div>
+        <div id="setSections"></div>
+      </div>
+      <div class="set-group">
+        <div class="set-label">Storage drives</div>
+        <div id="setDrives"><div class="disk-empty">Detecting drives…</div></div>
+      </div>
     </div>
-    <div class="set-group">
+
+    <div class="set-page" data-page="look">
+      <div class="set-group">
       <div class="set-row"><span class="set-label">Theme</span>
-        <select id="setTheme">
-          <option value="dark">Dark</option><option value="midnight">Midnight blue</option>
-          <option value="graphite">Graphite</option><option value="black">Black</option>
-          <option value="light">Light</option>
-        </select></div>
+        <select id="setTheme"><option value="dark">Dark</option><option value="midnight">Midnight blue</option><option value="graphite">Graphite</option><option value="black">Black</option><option value="light">Light</option></select></div>
       <div class="set-row"><span class="set-label">Accent</span>
         <div class="swatches" id="swatches"></div></div>
       <div class="set-row"><span class="set-label">Opacity</span>
         <span class="set-range"><input type="range" id="setOpacity" min="40" max="100" step="5"><b id="opacityVal">100%</b></span></div>
       <div class="set-row"><span class="set-label">Size</span>
-        <select id="setZoom">
-          <option value="0.95">Small</option><option value="1.05">Medium</option>
-          <option value="1.15">Large</option><option value="1.3">Extra large</option>
-        </select></div>
-      <div class="set-row"><span class="set-label">Position</span>
-        <select id="setCorner">
-          <option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option>
-          <option value="top-right">Top right</option><option value="top-left">Top left</option>
-        </select></div>
+        <select id="setZoom"><option value="0.95">Small</option><option value="1.05">Medium</option><option value="1.15">Large</option><option value="1.3">Extra large</option></select></div>
+      <div class="set-row"><span class="set-label">Density</span>
+        <select id="setDensity"><option value="normal">Normal</option><option value="compact">Compact</option></select></div>
+      </div>
+      <div class="set-group">
+        <div class="set-label">Clock</div>
+        <label class="set-check"><input type="checkbox" id="setClock24"> 24-hour time</label>
+        <label class="set-check"><input type="checkbox" id="setClockSeconds"> Show seconds</label>
+        <label class="set-check"><input type="checkbox" id="setClockDate"> Show date</label>
+      </div>
+    </div>
+
+    <div class="set-page" data-page="data">
+      <div class="set-group">
       <div class="set-row"><span class="set-label">Processes shown</span>
         <select id="setProcs"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></div>
+      <div class="set-row"><span class="set-label">Process columns</span>
+        <select id="setProcCols"><option value="both">CPU + Memory</option><option value="cpu">CPU only</option><option value="mem">Memory only</option></select></div>
       <div class="set-row"><span class="set-label">Update every</span>
-        <select id="setInterval">
-          <option value="1">1 second</option><option value="2">2 seconds</option><option value="5">5 seconds</option>
-        </select></div>
+        <select id="setInterval"><option value="1">1 second</option><option value="2">2 seconds</option><option value="5">5 seconds</option></select></div>
+      <div class="set-row"><span class="set-label">Red above</span>
+        <span class="set-range"><input type="range" id="setAlert" min="50" max="95" step="5"><b id="alertVal">80%</b></span></div>
+      </div>
+      <div class="set-group">
+      <div class="set-row"><span class="set-label">Storage / memory</span>
+        <select id="setDiskUnit"><option value="GB">GB (1000³)</option><option value="GiB">GiB (1024³)</option></select></div>
+      <div class="set-row"><span class="set-label">Network speed</span>
+        <select id="setNetUnit"><option value="bits">Mbps</option><option value="bytes">MB/s</option></select></div>
+      <div class="set-row"><span class="set-label">Temperature</span>
+        <select id="setTempUnit"><option value="C">°C</option><option value="F">°F</option></select></div>
+      </div>
+      <div class="set-group">
+        <div class="set-label">Network</div>
+        <label class="set-check"><input type="checkbox" id="setNetDetails"> Show IP, subnet, gateway, DNS</label>
+        <label class="set-check"><input type="checkbox" id="setNetGraph"> Show speed graph</label>
+      </div>
     </div>
+
+    <div class="set-page" data-page="window">
+      <div class="set-group">
+      <div class="set-row"><span class="set-label">Position</span>
+        <select id="setCorner"><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option><option value="top-right">Top right</option><option value="top-left">Top left</option></select></div>
+        <label class="set-check"><input type="checkbox" id="setBelow"> Keep below other windows</label>
+        <label class="set-check"><input type="checkbox" id="setClickThrough"> Click-through</label>
+        <div class="set-note">Clicks pass through to the desktop; only ⚙ stays clickable.</div>
+      </div>
+      <div class="set-group">
+        <button class="set-btn wide" id="resetBtn">Reset all settings to defaults</button>
+      </div>
+    </div>
+
     <div class="set-actions">
       <button class="set-btn danger" onclick="post({action:'quit'})">Close widget</button>
       <button class="set-btn primary" onclick="toggleSettings()">Done</button>
@@ -284,6 +359,34 @@
   </div>
   </div>
 
+  <!-- GPU -->
+  <div class="sec" id="sec-gpu">
+  <div class="section-title">GPU</div>
+  <div class="metric" id="gpuBody" style="display:none">
+    <div class="metric-header">
+      <div class="metric-label" id="gpuName">GPU</div>
+      <div class="metric-value gpu-val" id="gpuVal">—</div>
+    </div>
+    <div class="bar-track"><div class="bar-fill gpu-fill" id="gpuBar" style="width:0%"></div></div>
+    <div class="mini-stats"><span><b id="gpuTemp">—</b></span><span><b id="gpuMem">—</b> VRAM</span></div>
+  </div>
+  <div class="sec-note" id="gpuNote">Checking GPU…</div>
+  </div>
+
+  <!-- BATTERY -->
+  <div class="sec" id="sec-battery">
+  <div class="section-title">Battery</div>
+  <div class="metric" id="batBody" style="display:none">
+    <div class="metric-header">
+      <div class="metric-label" id="batState">—</div>
+      <div class="metric-value bat-val" id="batVal">—</div>
+    </div>
+    <div class="bar-track"><div class="bar-fill bat-fill" id="batBar" style="width:0%"></div></div>
+    <div class="mini-stats"><span id="batTime"></span></div>
+  </div>
+  <div class="sec-note" id="batNote">No battery detected</div>
+  </div>
+
   <!-- STORAGE -->
   <div class="sec" id="sec-storage">
   <div class="section-title">Storage</div>
@@ -316,17 +419,21 @@
       <div class="net-bar-track"><div class="net-bar-fill net-out-fill" id="netOutBar" style="width:0%"></div></div>
     </div>
   </div>
+  <div class="net-graph">
+    <canvas id="netGraph"></canvas>
+    <div class="net-graph-legend"><span style="color:#d2a8ff">↓ download</span><span style="color:#ffa198">↑ upload</span><span style="margin-left:auto">last <span id="netGraphSpan">60 s</span></span></div>
+  </div>
   </div>
 
   <!-- TOP PROCESSES -->
   <div class="sec" id="sec-procs">
   <div class="section-title">Top <span id="procCount">5</span> Processes</div>
-  <div class="proc-columns">
-    <div class="proc-col">
+  <div class="proc-columns" id="procColumns">
+    <div class="proc-col" id="procColCpu">
       <div class="proc-col-title cpu-title">▲ CPU</div>
       <div id="cpuProcs"></div>
     </div>
-    <div class="proc-col">
+    <div class="proc-col" id="procColMem">
       <div class="proc-col-title mem-title">▲ Memory</div>
       <div id="memProcs"></div>
     </div>
@@ -361,47 +468,97 @@ function esc(str) {
 function post(msg) {
   try { window.webkit.messageHandlers.widget.postMessage(JSON.stringify(msg)); } catch (e) {}
 }
+const SECTION_NAMES = { clock: 'Clock', cpumem: 'CPU & Memory', gpu: 'GPU (NVIDIA)', battery: 'Battery',
+                        storage: 'Storage', network: 'Network', procs: 'Top processes' };
+// Settings stored as-is from a form control: key -> element id
+const SELECT_IDS = { theme: 'setTheme', corner: 'setCorner', procCols: 'setProcCols', density: 'setDensity',
+                     diskUnit: 'setDiskUnit', netUnit: 'setNetUnit', tempUnit: 'setTempUnit' };
+const NUMBER_IDS = { zoom: 'setZoom', interval: 'setInterval', procs: 'setProcs', alert: 'setAlert' };
+const BOOL_IDS   = { clock24: 'setClock24', clockSeconds: 'setClockSeconds', clockDate: 'setClockDate',
+                     netDetails: 'setNetDetails', netGraph: 'setNetGraph', below: 'setBelow', clickThrough: 'setClickThrough' };
+const $ = id => document.getElementById(id);
+
 function updateSeparators() {
-  let first = true;
+  let first = null;
   for (const el of document.querySelectorAll('.sec')) {
     if (el.style.display === 'none') continue;
-    el.classList.toggle('sep', !first);
-    first = false;
+    el.classList.toggle('sep', first !== null);
+    if (first === null) first = el;
   }
-  document.getElementById('widget').classList.toggle('no-clock', SETTINGS && !SETTINGS.sections.clock);
+  // Leave room for the ⚙ button unless the clock (centred, with space at the right) is on top
+  $('widget').classList.toggle('no-clock', !first || first.id !== 'sec-clock');
+}
+// Section checkboxes with ▲▼ buttons, in display order
+function renderSectionRows(s) {
+  const box = $('setSections');
+  box.replaceChildren();
+  s.order.forEach((k, i) => {
+    const row = document.createElement('div'), label = document.createElement('label'), cb = document.createElement('input');
+    row.className = 'sec-row'; row.dataset.key = k;
+    label.className = 'set-check';
+    cb.type = 'checkbox'; cb.dataset.sec = k; cb.checked = s.sections[k];
+    cb.addEventListener('change', saveSettings);
+    label.append(cb, ' ' + SECTION_NAMES[k]);
+    row.appendChild(label);
+    for (const [txt, dir] of [['▲', -1], ['▼', 1]]) {
+      const b = document.createElement('button');
+      b.className = 'mv'; b.textContent = txt; b.title = dir < 0 ? 'Move up' : 'Move down';
+      b.disabled = (dir < 0 && i === 0) || (dir > 0 && i === s.order.length - 1);
+      b.onclick = () => {
+        const sib = dir < 0 ? row.previousElementSibling : row.nextElementSibling.nextElementSibling;
+        box.insertBefore(row, sib);
+        saveSettings();
+      };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
 }
 function applySettings(s) {
   SETTINGS = s;
-  for (const [k, on] of Object.entries(s.sections)) {
-    const el = document.getElementById('sec-' + k);
-    if (el) el.style.display = on ? '' : 'none';
-    const cb = document.querySelector(`input[data-sec="${k}"]`);
-    if (cb) cb.checked = on;
-  }
-  document.getElementById('setTheme').value    = s.theme || 'dark';
+  const w = $('widget'), footer = w.querySelector('.footer');
+  for (const k of s.order) w.insertBefore($('sec-' + k), footer);
+  for (const [k, on] of Object.entries(s.sections)) $('sec-' + k).style.display = on ? '' : 'none';
+  renderSectionRows(s);
+
+  for (const [k, id] of Object.entries(SELECT_IDS)) $(id).value = s[k];
+  for (const [k, id] of Object.entries(NUMBER_IDS)) $(id).value = String(s[k]);
+  for (const [k, id] of Object.entries(BOOL_IDS))   $(id).checked = s[k];
   applyTheme(s.theme, s.accent);
   const op = Math.round((s.opacity ?? 1) * 100);
-  document.getElementById('setOpacity').value = op;
-  document.getElementById('opacityVal').textContent = op + '%';
-  document.getElementById('setZoom').value     = String(s.zoom);
-  document.getElementById('setCorner').value   = s.corner;
-  document.getElementById('setInterval').value = String(s.interval);
-  document.getElementById('setProcs').value    = String(s.procs);
-  document.getElementById('procCount').textContent = s.procs;
+  $('setOpacity').value = op;
+  $('opacityVal').textContent = op + '%';
+  $('alertVal').textContent = s.alert + '%';
+
+  w.classList.toggle('h24', s.clock24);
+  w.classList.toggle('no-seconds', !s.clockSeconds);
+  w.classList.toggle('no-date', !s.clockDate);
+  w.classList.toggle('compact', s.density === 'compact');
+  w.classList.toggle('no-net-details', !s.netDetails);
+  w.classList.toggle('net-graph-on', s.netGraph);
+  $('procColCpu').style.display = s.procCols === 'mem' ? 'none' : '';
+  $('procColMem').style.display = s.procCols === 'cpu' ? 'none' : '';
+  $('procColumns').classList.toggle('single', s.procCols !== 'both');
+  $('procCount').textContent = s.procs;
+  $('footerText').textContent = s.interval == 1 ? 'updates every second' : `updates every ${s.interval} seconds`;
+  const span = NET_HIST * s.interval;
+  $('netGraphSpan').textContent = span >= 120 ? `${span / 60} min` : `${span} s`;
+
+  updateClock();
   if (window.SYSDATA) applyData(window.SYSDATA);
-  document.getElementById('footerText').textContent =
-    s.interval == 1 ? 'updates every second' : `updates every ${s.interval} seconds`;
   for (const cb of document.querySelectorAll('input[data-drive]')) cb.checked = s.drives.includes(cb.dataset.drive);
   updateSeparators();
+  post({ action: 'fit' });
 }
 function saveSettings() {
-  const s = { sections: {}, zoom: parseFloat(document.getElementById('setZoom').value),
-              corner: document.getElementById('setCorner').value,
-              interval: parseInt(document.getElementById('setInterval').value, 10),
-              procs: parseInt(document.getElementById('setProcs').value, 10),
-              theme: document.getElementById('setTheme').value,
-              opacity: parseInt(document.getElementById('setOpacity').value, 10) / 100,
+  const s = { sections: {},
+              opacity: parseInt($('setOpacity').value, 10) / 100,
               accent: (document.querySelector('.swatch.on') || {}).dataset?.color || ACCENTS[0] };
+  for (const [k, id] of Object.entries(SELECT_IDS)) s[k] = $(id).value;
+  for (const [k, id] of Object.entries(NUMBER_IDS)) s[k] = parseFloat($(id).value);
+  for (const [k, id] of Object.entries(BOOL_IDS))   s[k] = $(id).checked;
+  const rows = [...document.querySelectorAll('#setSections .sec-row')];
+  s.order = rows.map(r => r.dataset.key);
   for (const cb of document.querySelectorAll('input[data-sec]')) s.sections[cb.dataset.sec] = cb.checked;
   const boxes = [...document.querySelectorAll('input[data-drive]')];
   const listed = boxes.map(cb => cb.dataset.drive);
@@ -411,7 +568,8 @@ function saveSettings() {
   post({ action: 'save', settings: s });
 }
 function toggleSettings() {
-  document.getElementById('widget').classList.toggle('settings-open');
+  const open = $('widget').classList.toggle('settings-open');
+  post({ action: 'panel', open });
   post({ action: 'fit' });
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -429,6 +587,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   for (const el of document.querySelectorAll('#settings input, #settings select'))
     el.addEventListener('change', saveSettings);
+  const alertSlider = $('setAlert');
+  alertSlider.addEventListener('input', () => { $('alertVal').textContent = alertSlider.value + '%'; });
+
+  for (const b of document.querySelectorAll('#setTabs button')) b.onclick = () => {
+    for (const x of document.querySelectorAll('#setTabs button')) x.classList.toggle('on', x === b);
+    for (const pg of document.querySelectorAll('.set-page')) pg.classList.toggle('on', pg.dataset.page === b.dataset.tab);
+    post({ action: 'fit' });
+  };
+
+  // Reset needs a second click within 3 s
+  const reset = $('resetBtn');
+  let armed = null;
+  reset.onclick = () => {
+    if (armed) {
+      clearTimeout(armed); armed = null;
+      reset.classList.remove('armed'); reset.textContent = 'Reset all settings to defaults';
+      post({ action: 'reset' });
+      return;
+    }
+    reset.classList.add('armed'); reset.textContent = 'Click again to reset';
+    armed = setTimeout(() => { armed = null; reset.classList.remove('armed'); reset.textContent = 'Reset all settings to defaults'; }, 3000);
+  };
 });
 
 // ── CLOCK ─────────────────────────────────────────────────────
@@ -436,7 +616,7 @@ function updateClock() {
   const now  = new Date();
   let   h    = now.getHours();
   const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
+  if (!(SETTINGS && SETTINGS.clock24)) h = h % 12 || 12;
   const hm = String(h).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   document.getElementById('hm').textContent = hm;
   document.getElementById('ss').textContent = String(now.getSeconds()).padStart(2,'0');
@@ -450,18 +630,79 @@ function updateClock() {
 // ── BAR HELPER ────────────────────────────────────────────────
 function setBar(barId, valId, pct, cls) {
   const b = document.getElementById(barId), v = document.getElementById(valId);
-  const al = pct > 80;
+  const al = pct > ((SETTINGS && SETTINGS.alert) || 80);
   b.style.width = Math.min(100, pct).toFixed(1) + '%';
   b.className = `bar-fill ${cls}` + (al ? ' alert' : '');
   v.className  = `metric-value ${cls.replace('-fill','-val')}` + (al ? ' alert' : '');
   v.textContent = pct.toFixed(1) + '%';
 }
-function fmtNum(v) { return v >= 100 ? `${Math.round(v)}` : v.toFixed(1); }
-function fmtGB(v) { return v >= 100 ? `${Math.round(v)} GB` : `${v.toFixed(1)} GB`; }
+// Sizes arrive in GB (10^9 bytes); shown in GB or GiB per settings
+const gib = () => SETTINGS && SETTINGS.diskUnit === 'GiB';
+function conv(v) { return gib() ? v * 1e9 / 2 ** 30 : v; }
+function fmtNum(v) { v = conv(v); return v >= 100 ? `${Math.round(v)}` : v.toFixed(1); }
+function fmtGB(v) { return `${fmtNum(v)} ${gib() ? 'GiB' : 'GB'}`; }
+// Speeds arrive in Mbps; shown in bits or bytes per settings
 function fmtSpd(m) {
+  if (SETTINGS && SETTINGS.netUnit === 'bytes') {
+    const b = m / 8;  // MB/s
+    if (b >= 1000) return [(b/1000).toFixed(2), 'GB/s'];
+    if (b >= 1)    return [b.toFixed(1), 'MB/s'];
+    return [(b*1000).toFixed(0), 'KB/s'];
+  }
   if (m >= 1000) return [(m/1000).toFixed(2), 'Gbps'];
   if (m >= 1)    return [m.toFixed(1), 'Mbps'];
   return [(m*1000).toFixed(0), 'Kbps'];
+}
+function fmtTemp(c) {
+  return SETTINGS && SETTINGS.tempUnit === 'F' ? `${(c * 9 / 5 + 32).toFixed(0)}°F` : `${c.toFixed(0)}°C`;
+}
+
+// ── GPU / BATTERY ─────────────────────────────────────────────
+function renderGpu(g) {
+  const ok = g && !g.error;
+  $('gpuBody').style.display = ok ? '' : 'none';
+  $('gpuNote').style.display = ok ? 'none' : '';
+  if (!ok) { $('gpuNote').textContent = g ? `GPU unavailable: ${g.error}` : 'Checking GPU…'; return; }
+  $('gpuName').textContent = g.name;
+  setBar('gpuBar', 'gpuVal', g.util, 'gpu-fill');
+  $('gpuTemp').textContent = fmtTemp(g.temp);
+  $('gpuMem').textContent  = `${g.mem_used.toFixed(1)} / ${g.mem_total.toFixed(1)} GiB`;
+}
+function renderBattery(b) {
+  $('batBody').style.display = b ? '' : 'none';
+  $('batNote').style.display = b ? 'none' : '';
+  if (!b) return;
+  const low = b.pct <= 20 && !b.plugged;
+  $('batBar').style.width = Math.min(100, b.pct).toFixed(1) + '%';
+  $('batBar').className   = 'bar-fill bat-fill' + (low ? ' alert' : '');
+  $('batVal').className   = 'metric-value bat-val' + (low ? ' alert' : '');
+  $('batVal').textContent = b.pct.toFixed(0) + '%';
+  $('batState').textContent = b.plugged ? (b.pct >= 99 ? 'Full · plugged in' : 'Plugged in') : 'On battery';
+  $('batTime').textContent = b.secs != null
+    ? `${Math.floor(b.secs / 3600)}h ${String(Math.floor(b.secs % 3600 / 60)).padStart(2, '0')}m ${b.plugged ? 'to full' : 'left'}` : '';
+}
+
+// ── NETWORK GRAPH ─────────────────────────────────────────────
+const NET_HIST = 60;  // samples kept
+const netHist = [];
+let lastData = null;
+function drawNetGraph() {
+  const c = $('netGraph'), dpr = window.devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  if (!W) return;
+  if (c.width !== Math.round(W * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const max = Math.max(0.01, ...netHist.flat());
+  for (const [i, color] of [[0, '#d2a8ff'], [1, '#ffa198']]) {
+    ctx.beginPath();
+    netHist.forEach((v, j) => {
+      const x = W - (netHist.length - 1 - j) * (W / (NET_HIST - 1)), y = H - 1 - v[i] / max * (H - 2);
+      j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.strokeStyle = color; ctx.lineWidth = 1.3; ctx.stroke();
+  }
 }
 
 // ── STORAGE ───────────────────────────────────────────────────
@@ -522,7 +763,7 @@ function applyData(d) {
   setBar('cpuBar','cpuVal', d.cpu_pct, 'cpu-fill');
   document.getElementById('cpuFreq').textContent  = d.cpu_freq ? d.cpu_freq.toFixed(2) : '—';
   document.getElementById('cpuCores').textContent = d.cpu_cores || '—';
-  document.getElementById('cpuTemp').textContent  = d.cpu_temp ? d.cpu_temp.toFixed(0) + '°C' : 'N/A';
+  document.getElementById('cpuTemp').textContent  = d.cpu_temp ? fmtTemp(d.cpu_temp) : 'N/A';
 
   const memPct = d.mem_used / d.mem_total * 100;
   setBar('memBar','memVal', memPct, 'mem-fill');
@@ -530,6 +771,8 @@ function applyData(d) {
   document.getElementById('memFree').textContent  = fmtGB(d.mem_free);
   document.getElementById('memTotal').textContent = fmtGB(d.mem_total);
 
+  renderGpu(d.gpu);
+  renderBattery(d.battery);
   renderDriveOptions(d.disks || []);
   renderDisks(d.disks || []);
 
@@ -556,6 +799,12 @@ function applyData(d) {
   document.getElementById('netOutBar').style.width   = Math.min(100, no/1000*100).toFixed(1) + '%';
   document.getElementById('netInPeak').textContent   = `pk ${piv} ${piu}`;
   document.getElementById('netOutPeak').textContent  = `pk ${pov} ${pou}`;
+  if (d !== lastData) {  // a new sample (tick() re-applies the same data every second)
+    lastData = d;
+    netHist.push([ni, no]);
+    if (netHist.length > NET_HIST) netHist.shift();
+  }
+  if (SETTINGS && SETTINGS.netGraph) drawNetGraph();
 
   const procs = d.processes || [];
   const RAM   = d.mem_total || 16;

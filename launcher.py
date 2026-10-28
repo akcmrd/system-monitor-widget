@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """System Monitor Desktop Widget — GTK3 + WebKit2"""
 
-import gi, ipaddress, json, os, re, subprocess, threading, time
+import cairo, gi, ipaddress, json, os, re, subprocess, threading, time
 gi.require_version('Gtk',     '3.0')
 gi.require_version('WebKit2', '4.1')
 from gi.repository import Gtk, WebKit2, GLib, Gdk
@@ -17,9 +17,11 @@ ZOOM     = 1.15  # scales the whole widget; window auto-fits content
 
 # ── User settings (changed from the ⚙ panel in the widget) ──
 SETTINGS_PATH = os.path.expanduser('~/.config/system-monitor-widget/settings.json')
+SECTIONS = ('clock', 'cpumem', 'gpu', 'battery', 'storage', 'network', 'procs')
 DEFAULT_SETTINGS = {
-    'sections': {'clock': True, 'cpumem': True, 'storage': True,
-                 'network': True, 'procs': True},
+    'sections': {'clock': True, 'cpumem': True, 'gpu': False, 'battery': True,
+                 'storage': True, 'network': True, 'procs': True},
+    'order':    list(SECTIONS),  # top-to-bottom section order
     'zoom':     ZOOM,
     'corner':   'bottom-right',
     'interval': 1,
@@ -28,11 +30,28 @@ DEFAULT_SETTINGS = {
     'opacity':  1.0,
     'drives':   ['/'],  # mount points shown in the Storage section
     'procs':    5,      # processes listed per column (1..MAX_PROCS)
+    'procCols': 'both', # process columns: both, cpu or mem
+    'alert':    80,     # bars turn red above this percentage
+    'clock24':  False,
+    'clockSeconds': True,
+    'clockDate':    True,
+    'diskUnit': 'GB',   # GB (10^9) or GiB (2^30), for storage and memory
+    'netUnit':  'bits', # bits (Mbps) or bytes (MB/s)
+    'tempUnit': 'C',
+    'netDetails': True, # IP / subnet / gateway / DNS rows
+    'netGraph':   False,
+    'density':  'normal',
+    'below':    False,  # keep the window below other windows
+    'clickThrough': False,  # clicks pass through, except on the ⚙ button
 }
 MAX_PROCS = 10
 
 CORNERS = ('bottom-right', 'bottom-left', 'top-right', 'top-left')
 THEMES  = ('dark', 'midnight', 'graphite', 'black', 'light')
+CHOICES = {'corner': CORNERS, 'theme': THEMES, 'procCols': ('both', 'cpu', 'mem'),
+           'diskUnit': ('GB', 'GiB'), 'netUnit': ('bits', 'bytes'), 'tempUnit': ('C', 'F'),
+           'density': ('normal', 'compact')}
+BOOLS   = ('clock24', 'clockSeconds', 'clockDate', 'netDetails', 'netGraph', 'below', 'clickThrough')
 
 def _num(v, lo, hi, default):
     try:
@@ -59,10 +78,17 @@ def clean_settings(new, base=DEFAULT_SETTINGS):
         s['procs'] = int(_num(new['procs'], 1, MAX_PROCS, s['procs']))
     if 'opacity' in new:
         s['opacity'] = _num(new['opacity'], 0.4, 1.0, s['opacity'])
-    if new.get('corner') in CORNERS:
-        s['corner'] = new['corner']
-    if new.get('theme') in THEMES:
-        s['theme'] = new['theme']
+    if 'alert' in new:
+        s['alert'] = int(_num(new['alert'], 50, 95, s['alert']))
+    for k, allowed in CHOICES.items():
+        if new.get(k) in allowed:
+            s[k] = new[k]
+    for k in BOOLS:
+        if isinstance(new.get(k), bool):
+            s[k] = new[k]
+    if isinstance(new.get('order'), list):
+        order = [k for k in dict.fromkeys(x for x in new['order'] if isinstance(x, str)) if k in SECTIONS]
+        s['order'] = order + [k for k in SECTIONS if k not in order]
     if isinstance(new.get('accent'), str) and re.fullmatch(r'#[0-9a-fA-F]{6}', new['accent']):
         s['accent'] = new['accent']
     if isinstance(new.get('drives'), list):
@@ -189,7 +215,40 @@ def drives():
         out.append({'mount': m, 'used': u.used / 1e9, 'total': u.total / 1e9})
     return out
 
-def collect():
+def battery():
+    try:
+        b = psutil.sensors_battery()
+    except Exception:
+        b = None
+    if b is None:
+        return None
+    secs = b.secsleft if isinstance(b.secsleft, int) and b.secsleft >= 0 else None
+    return {'pct': b.percent, 'plugged': b.power_plugged, 'secs': secs}
+
+# ── NVIDIA GPU via nvidia-smi (cached; retried slowly while the driver is missing) ──
+GPU_TTL, GPU_RETRY = 2, 30
+_gpu = None
+_gpu_time = 0
+
+def gpu():
+    global _gpu, _gpu_time
+    ttl = GPU_RETRY if _gpu is None or 'error' in _gpu else GPU_TTL
+    if time.time() - _gpu_time < ttl:
+        return _gpu
+    _gpu_time = time.time()
+    try:
+        r = subprocess.run(['nvidia-smi', '--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total',
+                            '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=2)
+        name, util, temp, used, total = [x.strip() for x in r.stdout.splitlines()[0].split(',')]
+        _gpu = {'name': name, 'util': float(util), 'temp': float(temp),
+                'mem_used': float(used) / 1024, 'mem_total': float(total) / 1024}  # MiB -> GiB
+    except FileNotFoundError:
+        _gpu = {'error': 'nvidia-smi not installed'}
+    except Exception:
+        _gpu = {'error': 'NVIDIA driver not loaded'}
+    return _gpu
+
+def collect(want_gpu=False):
     global _prev_net, _prev_net_time, _prev_iface
 
     cpu_pct   = psutil.cpu_percent(interval=None)
@@ -247,6 +306,8 @@ def collect():
         'mem_free':   mem.available / 1e9,
         'mem_total':  mem.total   / 1e9,
         'disks':      drives(),
+        'battery':    battery(),
+        'gpu':        gpu() if want_gpu else None,
         'net':        net,
         'net_in_mbps':  max(0, net_in_mbps),
         'net_out_mbps': max(0, net_out_mbps),
@@ -290,6 +351,8 @@ class Widget(Gtk.Window):
         self.wv.set_zoom_level(self.settings['zoom'])
         self.wv.connect('load-changed', self._on_load)
         self.w, self.h = WIDGET_W, WIDGET_H
+        self.panel_open = False
+        self.gear_rect = None  # ⚙ button in window px, for click-through
 
         html_path = os.path.join(os.path.dirname(__file__), 'widget.html')
         self.wv.load_uri('file://' + html_path)
@@ -299,6 +362,7 @@ class Widget(Gtk.Window):
         # Transparency via compositor window opacity (not an RGBA visual,
         # which flickers with WebKitGTK 4.1)
         self.set_opacity(self.settings['opacity'])
+        self.set_keep_below(self.settings['below'])
 
         # Position in the chosen corner after the window is mapped
         self._reposition()
@@ -342,17 +406,44 @@ class Widget(Gtk.Window):
         elif action == 'quit':
             Gtk.main_quit()
         elif action == 'save':
-            old = self.settings
-            self.settings = clean_settings(msg.get('settings'), old)
-            save_settings(self.settings)
-            self.set_opacity(self.settings['opacity'])
-            if self.settings['zoom'] != old['zoom']:
-                self.wv.set_zoom_level(self.settings['zoom'])
-            if self.settings['interval'] != old['interval']:
-                GLib.source_remove(self._push_id)
-                self._push_id = GLib.timeout_add(int(self.settings['interval'] * 1000), self._push_data)
-            self._reposition()
-            GLib.timeout_add(50, self._fit)
+            self._apply(clean_settings(msg.get('settings'), self.settings))
+        elif action == 'reset':
+            self._apply(clean_settings({}))
+            self.wv.run_javascript(f"applySettings({json.dumps(self.settings)});", None, None, None)
+        elif action == 'panel':  # settings panel opened/closed: it must stay clickable
+            self.panel_open = bool(msg.get('open'))
+            self._update_input_shape()
+
+    def _apply(self, new):
+        old, self.settings = self.settings, new
+        save_settings(new)
+        self.set_opacity(new['opacity'])
+        self.set_keep_below(new['below'])
+        if new['zoom'] != old['zoom']:
+            self.wv.set_zoom_level(new['zoom'])
+        if new['interval'] != old['interval']:
+            GLib.source_remove(self._push_id)
+            self._push_id = GLib.timeout_add(int(new['interval'] * 1000), self._push_data)
+        if new['sections']['gpu'] and not old['sections']['gpu']:
+            GLib.idle_add(self._push_data_once)
+        self._update_input_shape()
+        self._reposition()
+        GLib.timeout_add(50, self._fit)
+
+    def _push_data_once(self):
+        self._push_data()
+        return False
+
+    def _update_input_shape(self):
+        """Click-through: only the ⚙ button takes clicks (whole window while the panel is open)."""
+        win = self.get_window()
+        if not win:
+            return
+        if self.settings['clickThrough'] and not self.panel_open and self.gear_rect:
+            rect = cairo.RectangleInt(*self.gear_rect)
+        else:
+            rect = cairo.RectangleInt(0, 0, 10000, 10000)  # whole window clickable
+        win.input_shape_combine_region(cairo.Region(rect), 0, 0)
 
     def _on_load(self, wv, event):
         if event == WebKit2.LoadEvent.FINISHED:
@@ -366,19 +457,26 @@ class Widget(Gtk.Window):
         return True  # keep repeating
 
     def _fit(self):
-        js = ("(() => { const r = document.querySelector('.widget')"
-              ".getBoundingClientRect(); return JSON.stringify([r.width, r.height, innerWidth]); })()")
+        js = ("(() => { const r = document.querySelector('.widget').getBoundingClientRect(),"
+              " g = document.getElementById('gearBtn').getBoundingClientRect();"
+              " return JSON.stringify([r.width, r.height, innerWidth, [g.left, g.top, g.width, g.height]]); })()")
         self.wv.run_javascript(js, None, self._fit_done, None)
         return False
 
     def _fit_done(self, wv, res, _):
         try:
-            w, h, vw = json.loads(wv.run_javascript_finish(res).get_js_value().to_string())
+            w, h, vw, g = json.loads(wv.run_javascript_finish(res).get_js_value().to_string())
         except Exception as e:
             print(f"[widget] fit error: {e}")
             return
         # Real CSS-px -> window-px ratio (ZOOM x any desktop scaling WebKit applies)
         scale = wv.get_allocated_width() / vw if vw else ZOOM
+        pad = 4  # a little slack around the ⚙ button
+        gear = (int(g[0] * scale) - pad, int(g[1] * scale) - pad,
+                int(g[2] * scale) + 2 * pad, int(g[3] * scale) + 2 * pad)
+        if gear != self.gear_rect:
+            self.gear_rect = gear
+            self._update_input_shape()
         self.w = min(int(w * scale + 0.999), self.sw - 2 * MARGIN)
         self.h = min(int(h * scale + 0.999), self.sh - 2 * MARGIN)
         if abs(wv.get_allocated_width() - self.w) <= 1 and abs(wv.get_allocated_height() - self.h) <= 1:
@@ -390,7 +488,7 @@ class Widget(Gtk.Window):
 
     def _push_data(self):
         try:
-            data = collect()
+            data = collect(self.settings['sections']['gpu'])
             js   = f"window.SYSDATA = {json.dumps(data)};"
             self.wv.run_javascript(js, None, None, None)
         except Exception as e:

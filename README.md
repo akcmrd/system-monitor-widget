@@ -12,12 +12,13 @@ colour, size, corner, opacity and update interval.
 - Python 3
 - GTK 3 and WebKit2GTK 4.1 with Python bindings
 - [psutil](https://pypi.org/project/psutil/)
+- pycairo (`python3-gi-cairo` on Debian/Ubuntu), for click-through
 - NetworkManager (`nmcli`) and `iproute2` (`ip`) for network details
 
 On Debian/Ubuntu:
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 python3-psutil network-manager iproute2
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 python3-psutil network-manager iproute2
 ```
 
 ## Install
@@ -38,7 +39,14 @@ sed "s|%h|$HOME|" system-monitor-widget.desktop > ~/.config/autostart/system-mon
 
 ## Settings
 
-Saved to `~/.config/system-monitor-widget/settings.json` when you change them in the ⚙ panel.
+Click ⚙ in the top-right corner. Changes are saved to `~/.config/system-monitor-widget/settings.json`.
+
+- **Layout:** show, hide and reorder sections (Clock, CPU & Memory, GPU, Battery, Storage, Network, Top processes); pick storage drives
+- **Look:** theme, accent colour, opacity, size, normal/compact density; 12/24-hour clock, seconds, date
+- **Data:** processes shown (1–10), process columns, update interval, red-alert threshold, GB/GiB, Mbps/MB/s, °C/°F, network details, network speed graph
+- **Window:** corner, keep below other windows, click-through (only ⚙ stays clickable), reset to defaults
+
+The GPU section reads NVIDIA cards through `nvidia-smi`; it is off by default.
 
 ## Notes
 
