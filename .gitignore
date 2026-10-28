@@ -4,3 +4,4 @@ __pycache__/
 *.new
 *.tmp
 backups/
+*.transparent
