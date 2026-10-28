@@ -42,5 +42,5 @@ Saved to `~/.config/system-monitor-widget/settings.json` when you change them in
 
 ## Notes
 
-- The storage section shows `/`, and also `/data` and `/data2` when those are mount points.
+- The storage section shows `/` by default; pick other mounted drives under ⚙ → Storage drives.
 - Nothing is sent over the network; all data is read locally with psutil, `ip` and `nmcli`.

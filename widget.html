@@ -109,8 +109,9 @@
   .divider { height: 1px; background: var(--line); margin: 8px 0; }
 
   /* ── STORAGE (compact) ── */
-  .disk-row { display: grid; grid-template-columns: 44px 1fr 38px 84px; align-items: center; gap: 7px; padding: 2px 0; }
-  .disk-name { font-size: 10px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .disk-row { display: grid; grid-template-columns: 56px 1fr 38px 84px; align-items: center; gap: 7px; padding: 2px 0; }
+  .disk-name { font-size: 10px; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .disk-empty { font-size: 10px; color: var(--muted); padding: 2px 0; }
   .disk-row .bar-track { height: 5px; }
   .disk-row .metric-value { font-size: 10px; text-align: right; }
   .disk-size { font-size: 9px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -203,6 +204,10 @@
       <label class="set-check"><input type="checkbox" data-sec="procs"> Top processes</label>
     </div>
     <div class="set-group">
+      <div class="set-label">Storage drives</div>
+      <div id="setDrives"><div class="disk-empty">Detecting drives…</div></div>
+    </div>
+    <div class="set-group">
       <div class="set-row"><span class="set-label">Theme</span>
         <select id="setTheme">
           <option value="dark">Dark</option><option value="midnight">Midnight blue</option>
@@ -223,6 +228,8 @@
           <option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option>
           <option value="top-right">Top right</option><option value="top-left">Top left</option>
         </select></div>
+      <div class="set-row"><span class="set-label">Processes shown</span>
+        <select id="setProcs"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></div>
       <div class="set-row"><span class="set-label">Update every</span>
         <select id="setInterval">
           <option value="1">1 second</option><option value="2">2 seconds</option><option value="5">5 seconds</option>
@@ -281,24 +288,7 @@
   <div class="sec" id="sec-storage">
   <div class="section-title">Storage</div>
   <div>
-    <div class="disk-row" id="hddDisk">
-      <span class="disk-name">/</span>
-      <div class="bar-track"><div class="bar-fill hdd-fill" id="hddBar" style="width:0%"></div></div>
-      <span class="metric-value hdd-val" id="hddVal">—</span>
-      <span class="disk-size" id="hddSize">—</span>
-    </div>
-    <div class="disk-row" id="dataDisk">
-      <span class="disk-name">/data</span>
-      <div class="bar-track"><div class="bar-fill hdd-fill" id="dataBar" style="width:0%"></div></div>
-      <span class="metric-value hdd-val" id="dataVal">—</span>
-      <span class="disk-size" id="dataSize">—</span>
-    </div>
-    <div class="disk-row" id="data2Disk">
-      <span class="disk-name">/data2</span>
-      <div class="bar-track"><div class="bar-fill hdd-fill" id="data2Bar" style="width:0%"></div></div>
-      <span class="metric-value hdd-val" id="data2Val">—</span>
-      <span class="disk-size" id="data2Size">—</span>
-    </div>
+    <div id="diskList"></div>
   </div>
   </div>
 
@@ -330,7 +320,7 @@
 
   <!-- TOP PROCESSES -->
   <div class="sec" id="sec-procs">
-  <div class="section-title">Top 5 Processes</div>
+  <div class="section-title">Top <span id="procCount">5</span> Processes</div>
   <div class="proc-columns">
     <div class="proc-col">
       <div class="proc-col-title cpu-title">▲ CPU</div>
@@ -396,18 +386,27 @@ function applySettings(s) {
   document.getElementById('setZoom').value     = String(s.zoom);
   document.getElementById('setCorner').value   = s.corner;
   document.getElementById('setInterval').value = String(s.interval);
+  document.getElementById('setProcs').value    = String(s.procs);
+  document.getElementById('procCount').textContent = s.procs;
+  if (window.SYSDATA) applyData(window.SYSDATA);
   document.getElementById('footerText').textContent =
     s.interval == 1 ? 'updates every second' : `updates every ${s.interval} seconds`;
+  for (const cb of document.querySelectorAll('input[data-drive]')) cb.checked = s.drives.includes(cb.dataset.drive);
   updateSeparators();
 }
 function saveSettings() {
   const s = { sections: {}, zoom: parseFloat(document.getElementById('setZoom').value),
               corner: document.getElementById('setCorner').value,
               interval: parseInt(document.getElementById('setInterval').value, 10),
+              procs: parseInt(document.getElementById('setProcs').value, 10),
               theme: document.getElementById('setTheme').value,
               opacity: parseInt(document.getElementById('setOpacity').value, 10) / 100,
               accent: (document.querySelector('.swatch.on') || {}).dataset?.color || ACCENTS[0] };
   for (const cb of document.querySelectorAll('input[data-sec]')) s.sections[cb.dataset.sec] = cb.checked;
+  const boxes = [...document.querySelectorAll('input[data-drive]')];
+  const listed = boxes.map(cb => cb.dataset.drive);
+  s.drives = [...boxes.filter(cb => cb.checked).map(cb => cb.dataset.drive),
+              ...((SETTINGS && SETTINGS.drives) || []).filter(m => !listed.includes(m))];
   applySettings(s);
   post({ action: 'save', settings: s });
 }
@@ -465,6 +464,58 @@ function fmtSpd(m) {
   return [(m*1000).toFixed(0), 'Kbps'];
 }
 
+// ── STORAGE ───────────────────────────────────────────────────
+// Checkbox per mounted drive in the settings panel; rebuilt only when drives change
+function renderDriveOptions(disks) {
+  const box = document.getElementById('setDrives');
+  const key = disks.map(x => x.mount).join('\n');
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.replaceChildren();
+  const want = (SETTINGS && SETTINGS.drives) || ['/'];
+  for (const x of disks) {
+    const label = document.createElement('label'), cb = document.createElement('input');
+    label.className = 'set-check';
+    cb.type = 'checkbox'; cb.dataset.drive = x.mount; cb.checked = want.includes(x.mount);
+    cb.addEventListener('change', saveSettings);
+    label.append(cb, ' ' + x.mount);
+    box.appendChild(label);
+  }
+  post({ action: 'fit' });
+}
+// One row per selected drive; rows rebuilt only when the selection or mounts change
+function renderDisks(disks) {
+  const want  = (SETTINGS && SETTINGS.drives) || ['/'];
+  const shown = disks.filter(x => want.includes(x.mount));
+  const list  = document.getElementById('diskList');
+  const key   = shown.map(x => x.mount).join('\n');
+  if (list.dataset.key !== key) {
+    list.dataset.key = key;
+    list.replaceChildren();
+    if (!shown.length) {
+      const e = document.createElement('div');
+      e.className = 'disk-empty'; e.textContent = 'No drives selected (⚙ → Storage drives)';
+      list.appendChild(e);
+    }
+    shown.forEach((x, i) => {
+      const row = document.createElement('div');
+      row.className = 'disk-row';
+      row.innerHTML = `<span class="disk-name"></span>
+        <div class="bar-track"><div class="bar-fill hdd-fill" id="diskBar${i}" style="width:0%"></div></div>
+        <span class="metric-value hdd-val" id="diskVal${i}">—</span>
+        <span class="disk-size" id="diskSize${i}">—</span>`;
+      const name = row.querySelector('.disk-name');
+      name.textContent = x.mount; name.title = x.mount;  // mount names can contain anything
+      list.appendChild(row);
+    });
+    post({ action: 'fit' });
+  }
+  shown.forEach((x, i) => {
+    setBar('diskBar' + i, 'diskVal' + i, x.total ? x.used / x.total * 100 : 0, 'hdd-fill');
+    document.getElementById('diskSize' + i).textContent = `${fmtNum(x.used)} / ${fmtGB(x.total)}`;
+  });
+}
+
 let netInPk = 0, netOutPk = 0;
 
 function applyData(d) {
@@ -479,18 +530,8 @@ function applyData(d) {
   document.getElementById('memFree').textContent  = fmtGB(d.mem_free);
   document.getElementById('memTotal').textContent = fmtGB(d.mem_total);
 
-  const disks = [
-    ['hdd',   d.disk_used,  d.disk_total],
-    ['data',  d.data_used,  d.data_total],
-    ['data2', d.data2_used, d.data2_total],
-  ];
-  for (const [k, used, total] of disks) {
-    const has = total != null;
-    document.getElementById(k + 'Disk').style.display = has ? '' : 'none';
-    if (!has) continue;
-    setBar(k + 'Bar', k + 'Val', used / total * 100, 'hdd-fill');
-    document.getElementById(k + 'Size').textContent = `${fmtNum(used)} / ${fmtGB(total)}`;
-  }
+  renderDriveOptions(d.disks || []);
+  renderDisks(d.disks || []);
 
   const n = d.net || {};
   const up = !!n.iface;
@@ -520,7 +561,8 @@ function applyData(d) {
   const RAM   = d.mem_total || 16;
 
   // Sort by CPU
-  const byCPU = [...procs].sort((a,b) => b.cpu - a.cpu).slice(0,5);
+  const N     = (SETTINGS && SETTINGS.procs) || 5;
+  const byCPU = [...procs].sort((a,b) => b.cpu - a.cpu).slice(0,N);
   const maxCPU = Math.max(...byCPU.map(p => p.cpu), 1);
   document.getElementById('cpuProcs').innerHTML = byCPU.map(p => {
     const al  = p.cpu > 45;
@@ -535,7 +577,7 @@ function applyData(d) {
   }).join('');
 
   // Sort by Memory
-  const byMem = [...procs].sort((a,b) => b.mem - a.mem).slice(0,5);
+  const byMem = [...procs].sort((a,b) => b.mem - a.mem).slice(0,N);
   const maxMem = Math.max(...byMem.map(p => p.mem), 0.01);
   document.getElementById('memProcs').innerHTML = byMem.map(p => {
     const barW = Math.min(100, p.mem / maxMem * 100).toFixed(1);

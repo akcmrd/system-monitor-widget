@@ -26,7 +26,10 @@ DEFAULT_SETTINGS = {
     'theme':    'dark',
     'accent':   '#58a6ff',
     'opacity':  1.0,
+    'drives':   ['/'],  # mount points shown in the Storage section
+    'procs':    5,      # processes listed per column (1..MAX_PROCS)
 }
+MAX_PROCS = 10
 
 CORNERS = ('bottom-right', 'bottom-left', 'top-right', 'top-left')
 THEMES  = ('dark', 'midnight', 'graphite', 'black', 'light')
@@ -52,6 +55,8 @@ def clean_settings(new, base=DEFAULT_SETTINGS):
         s['zoom'] = _num(new['zoom'], 0.5, 2.0, s['zoom'])
     if 'interval' in new:
         s['interval'] = int(_num(new['interval'], 1, 60, s['interval']))
+    if 'procs' in new:
+        s['procs'] = int(_num(new['procs'], 1, MAX_PROCS, s['procs']))
     if 'opacity' in new:
         s['opacity'] = _num(new['opacity'], 0.4, 1.0, s['opacity'])
     if new.get('corner') in CORNERS:
@@ -60,6 +65,9 @@ def clean_settings(new, base=DEFAULT_SETTINGS):
         s['theme'] = new['theme']
     if isinstance(new.get('accent'), str) and re.fullmatch(r'#[0-9a-fA-F]{6}', new['accent']):
         s['accent'] = new['accent']
+    if isinstance(new.get('drives'), list):
+        s['drives'] = [d for d in new['drives']
+                       if isinstance(d, str) and d.startswith('/') and len(d) < 256][:20]
     return s
 
 def load_settings():
@@ -155,6 +163,32 @@ def net_info():
     _net_info = info
     return info
 
+# ── Mounted drives (list refreshed every DRIVES_TTL s, usage every tick) ──
+DRIVES_TTL = 10
+_drives = []
+_drives_time = 0
+
+def drives():
+    """Real mounted filesystems (no loop/snap mounts), one entry per device."""
+    global _drives, _drives_time
+    if time.time() - _drives_time >= DRIVES_TTL:
+        _drives_time = time.time()
+        seen, found = set(), []
+        for p in psutil.disk_partitions(all=False):
+            if p.device in seen or p.device.startswith('/dev/loop') or p.mountpoint.startswith('/snap/'):
+                continue
+            seen.add(p.device)
+            found.append(p.mountpoint)
+        _drives = sorted(found, key=lambda m: (m != '/', m))
+    out = []
+    for m in _drives:
+        try:
+            u = psutil.disk_usage(m)
+        except OSError:
+            continue  # unmounted since the last scan
+        out.append({'mount': m, 'used': u.used / 1e9, 'total': u.total / 1e9})
+    return out
+
 def collect():
     global _prev_net, _prev_net_time, _prev_iface
 
@@ -172,9 +206,6 @@ def collect():
         pass
 
     mem  = psutil.virtual_memory()
-    disk = psutil.disk_usage('/')
-    data = psutil.disk_usage('/data') if os.path.ismount('/data') else None
-    data2 = psutil.disk_usage('/data2') if os.path.ismount('/data2') else None
 
     # Network delta on the active interface only
     net      = net_info()
@@ -189,7 +220,7 @@ def collect():
     _prev_net      = now_net
     _prev_net_time = now_time
 
-    # Top processes by combined CPU+MEM score
+    # Top processes: the 10 busiest by CPU plus the 10 largest by memory
     procs = []
     for p in psutil.process_iter(['pid','name','cpu_percent','memory_info']):
         try:
@@ -204,10 +235,8 @@ def collect():
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
 
-    ram_gb   = mem.total / 1e9
-    max_cpu  = max((p['cpu'] for p in procs), default=1) or 1
-    procs.sort(key=lambda p: p['cpu']/max_cpu + p['mem']/max(0.001, ram_gb),
-               reverse=True)
+    top = {p['pid']: p for key in ('cpu', 'mem')
+           for p in sorted(procs, key=lambda p: p[key], reverse=True)[:MAX_PROCS]}
 
     return {
         'cpu_pct':    cpu_pct,
@@ -217,19 +246,11 @@ def collect():
         'mem_used':   mem.used    / 1e9,
         'mem_free':   mem.available / 1e9,
         'mem_total':  mem.total   / 1e9,
-        'disk_used':  disk.used   / 1e9,
-        'disk_free':  disk.free   / 1e9,
-        'disk_total': disk.total  / 1e9,
-        'data_used':  data.used   / 1e9 if data else None,
-        'data_free':  data.free   / 1e9 if data else None,
-        'data_total': data.total  / 1e9 if data else None,
-        'data2_used':  data2.used  / 1e9 if data2 else None,
-        'data2_free':  data2.free  / 1e9 if data2 else None,
-        'data2_total': data2.total / 1e9 if data2 else None,
+        'disks':      drives(),
         'net':        net,
         'net_in_mbps':  max(0, net_in_mbps),
         'net_out_mbps': max(0, net_out_mbps),
-        'processes':  procs[:10],
+        'processes':  list(top.values()),
     }
 
 # ── GTK window ───────────────────────────────────────────────
