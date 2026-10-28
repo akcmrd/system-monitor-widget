@@ -31,7 +31,7 @@ fi
 cat <<EOF
 
 ${BLUE}  ╭──────────────────────────────────────────────╮
-  │        System Monitor Widget · installer     │
+  │  *      System Monitor Widget · installer    │   *
   ╰──────────────────────────────────────────────╯${R}
 
   A small desktop widget showing clock, CPU, memory, GPU, battery,
