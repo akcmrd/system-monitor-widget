@@ -61,11 +61,33 @@ elif command -v zypper  >/dev/null; then PM=zypper
 else PM=unknown
 fi
 
-# name | why it is needed | python check | apt | dnf | pacman | zypper
+# WebKit2GTK 4.1, or 4.0 on older releases (Ubuntu 20.04, Debian 11) that don't ship 4.1
+WEBKIT_CHECK="import gi; v=[x for x in ('4.1','4.0') if x in gi.Repository.get_default().enumerate_versions('WebKit2')]; gi.require_version('WebKit2', v[0]); from gi.repository import WebKit2"
+pkg_available() {
+    case $PM in
+        apt)    [[ -n "$(apt-cache policy "$1" 2>/dev/null | grep 'Candidate:' | grep -v '(none)')" ]];;
+        dnf)    dnf -q info "$1" >/dev/null 2>&1;;
+        pacman) pacman -Si "$1" >/dev/null 2>&1;;
+        zypper) zypper -q info "$1" 2>/dev/null | grep -q '^Name';;
+        *)      false;;
+    esac
+}
+webkit_pkg() {
+    local new old
+    case $PM in
+        apt)    new=gir1.2-webkit2-4.1      old=gir1.2-webkit2-4.0;;
+        dnf)    new=webkit2gtk4.1           old=webkit2gtk4.0;;
+        pacman) new=webkit2gtk-4.1          old=webkit2gtk;;
+        zypper) new=typelib-1_0-WebKit2-4_1 old=typelib-1_0-WebKit2-4_0;;
+    esac
+    if pkg_available "$new"; then echo "$new"; else echo "$old"; fi
+}
+
+# name | why it is needed | python check | apt | dnf | pacman | zypper  (@webkit = picked by webkit_pkg)
 DEPS=(
 "PyGObject|Python bindings that let the app use GTK and WebKit|import gi|python3-gi|python3-gobject|python-gobject|python3-gobject"
 "GTK 3|Creates the widget window (frameless, on every workspace)|import gi; gi.require_version('Gtk','3.0'); from gi.repository import Gtk|gir1.2-gtk-3.0|gtk3|gtk3|typelib-1_0-Gtk-3_0"
-"WebKit2GTK 4.1|Draws the widget's interface (widget.html) inside the window|import gi; gi.require_version('WebKit2','4.1'); from gi.repository import WebKit2|gir1.2-webkit2-4.1|webkit2gtk4.1|webkit2gtk-4.1|typelib-1_0-WebKit2-4_1"
+"WebKit2GTK|Draws the widget's interface (widget.html) inside the window|$WEBKIT_CHECK|@webkit|@webkit|@webkit|@webkit"
 "pycairo|Shapes the window for the click-through option|import gi, cairo; gi.require_foreign('cairo')|python3-gi-cairo|python3-cairo|python-cairo|python3-gobject-cairo"
 "psutil|Reads CPU, memory, disk, battery, network and process stats|import psutil|python3-psutil|python3-psutil|python-psutil|python3-psutil"
 )
@@ -85,7 +107,9 @@ for d in "${DEPS[@]}"; do
     else
         mark="${RED}✘ missing  ${R}"
         any_missing=yes
-        case $PM in apt) missing+=("$apt");; dnf) missing+=("$dnf");; pacman) missing+=("$pacman");; zypper) missing+=("$zypper");; esac
+        case $PM in apt) pkg=$apt;; dnf) pkg=$dnf;; pacman) pkg=$pacman;; zypper) pkg=$zypper;; *) pkg=;; esac
+        [[ $pkg == @webkit ]] && pkg=$(webkit_pkg)
+        [[ -n $pkg ]] && missing+=("$pkg")
     fi
     printf '  %s  %-15s %s%s%s\n' "$mark" "$name" "$DIM" "$why" "$R"
 done
